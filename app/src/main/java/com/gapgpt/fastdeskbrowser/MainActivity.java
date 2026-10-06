@@ -65,6 +65,7 @@ public class MainActivity extends Activity {
     private String pendingDownloadUrl = "";
     private String pendingDownloadName = "download";
     private String detectedMediaUrl = "";
+    private final LinkedHashSet<String> detectedMediaUrls = new LinkedHashSet<>();
     private boolean mediaUiPending = false;
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest pendingWebPermissionRequest;
@@ -109,14 +110,16 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         appName = new TextView(this); appName.setText("FastDesk Browser"); appName.setTextColor(Color.WHITE); appName.setTextSize(17); appName.setTypeface(null,1);
         title.addView(appName,new LinearLayout.LayoutParams(0,dp(29),1));
         toolButton = xpButton("Tool"); toolButton.setTextColor(Color.WHITE); toolButton.setTextSize(11); toolButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
+        downloadButton = xpButton("ساخت لینک"); downloadButton.setTextColor(Color.WHITE); downloadButton.setTextSize(9); downloadButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff)); downloadButton.setContentDescription("شناسایی رسانه و ساخت لینک دانلود");
         TextView setupButton = xpButton("Setup"); setupButton.setTextColor(Color.WHITE); setupButton.setTextSize(11); setupButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
         mouseCursorButton = xpButton("🖱 Mouse"); mouseCursorButton.setTextColor(Color.WHITE); mouseCursorButton.setTextSize(11); mouseCursorButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
         copyButton = xpButton("Copy Mini Win"); copyButton.setTextColor(Color.WHITE); copyButton.setTextSize(10); copyButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
         title.addView(toolButton,new LinearLayout.LayoutParams(dp(48),dp(29)));
+        title.addView(downloadButton,new LinearLayout.LayoutParams(dp(61),dp(29)));
         title.addView(setupButton,new LinearLayout.LayoutParams(dp(52),dp(29)));
         LinearLayout.LayoutParams mouseTitleParams = new LinearLayout.LayoutParams(dp(66),dp(29)); mouseTitleParams.setMargins(dp(2),0,dp(2),0); title.addView(mouseCursorButton,mouseTitleParams);
         title.addView(copyButton,new LinearLayout.LayoutParams(dp(65),dp(29)));
-        toolButton.setOnClickListener(v -> showToolMenu()); setupButton.setOnClickListener(v -> showSettings()); mouseCursorButton.setOnClickListener(v -> toggleMouseWindow()); copyButton.setOnClickListener(v -> toggleCopyMode());
+        toolButton.setOnClickListener(v -> showToolMenu()); downloadButton.setOnClickListener(v -> downloadDetectedOrPrompt()); setupButton.setOnClickListener(v -> showSettings()); mouseCursorButton.setOnClickListener(v -> toggleMouseWindow()); copyButton.setOnClickListener(v -> toggleCopyMode());
         TextView mini = xpButton("—"); TextView max = xpButton("□"); TextView close = xpButton("×");
         for(TextView winButton:new TextView[]{mini,max,close}) { LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(dp(27),dp(27)); wp.setMargins(dp(1),0,0,0); title.addView(winButton,wp); }
         mini.setOnClickListener(v -> Toast.makeText(this,"برای ادامه، برنامه را به پس‌زمینه ببرید.",Toast.LENGTH_SHORT).show());
@@ -472,9 +475,8 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
                 // Keep this callback extremely light: it runs for many subresources on a page.
                 // Only inspect likely media URLs and avoid posting duplicate UI work.
                 String u=request.getUrl().toString();
-                String low=u.toLowerCase(Locale.ROOT);
-                if(low.contains(".mp4")||low.contains(".webm")||low.contains(".m4v")||low.contains(".m3u8")||low.contains(".mpd")){
-                    detectedMediaUrl=u;
+                if(isMediaCandidate(u)){
+                    synchronized(detectedMediaUrls){ detectedMediaUrls.add(u); while(detectedMediaUrls.size()>80){ Iterator<String> it=detectedMediaUrls.iterator(); if(it.hasNext()){String old=it.next();it.remove();if(old.equals(detectedMediaUrl))detectedMediaUrl="";} } detectedMediaUrl=u; }
                     if(!mediaUiPending){ mediaUiPending=true; handler.post(()->{mediaUiPending=false; setVideoReady(true);}); }
                 }
                 return super.shouldInterceptRequest(view,request);
@@ -544,16 +546,24 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
     }
 
     private void openGoogleSignInExternally(String url){
-        try {
-            Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(url));
-            intent.addCategory(Intent.CATEGORY_BROWSABLE);
-            startActivity(intent);
-            Toast.makeText(this,"ورود گوگل در مرورگر خارجی ادامه می‌یابد؛ پس از تأیید به FastDesk برگردید.",Toast.LENGTH_LONG).show();
-        } catch(Exception e){
-            new AlertDialog.Builder(this).setTitle("ورود به Google Account")
-                .setMessage("برای ورود امن به حساب گوگل، یک مرورگر مانند Chrome، Edge یا Firefox نصب/فعال کنید و دوباره تلاش کنید.")
-                .setPositiveButton("باشه",null).show();
-        }
+        // Keep FastDesk in the user's choices as well as installed external browsers.
+        // Some sign-in providers reject WebView, so external browser remains the recommended path.
+        new AlertDialog.Builder(this)
+            .setTitle("انتخاب مرورگر برای ورود")
+            .setMessage("می‌توانید همین صفحه را در FastDesk باز کنید یا یک مرورگر خارجی را انتخاب کنید. بعضی سرویس‌ها ورود داخل مرورگر داخلی را نمی‌پذیرند.")
+            .setItems(new String[]{"FastDesk Browser (همین مرورگر)","انتخاب مرورگر خارجی نصب‌شده…"},(dialog,which)->{
+                if(which==0){ loadUrl(url); return; }
+                try {
+                    Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(url));
+                    intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                    startActivity(Intent.createChooser(intent,"بازکردن صفحه با مرورگر"));
+                } catch(Exception e){
+                    new AlertDialog.Builder(this).setTitle("مرورگر خارجی پیدا نشد")
+                        .setMessage("می‌توانید با FastDesk ادامه دهید یا یک مرورگر نصب کنید.")
+                        .setPositiveButton("ادامه با FastDesk",(d,w)->loadUrl(url))
+                        .setNegativeButton("بستن",null).show();
+                }
+            }).setNegativeButton("لغو",null).show();
     }
 
     private void askWebPermission(PermissionRequest request){String[] resources=request.getResources();ArrayList<String> androidPermissions=new ArrayList<>();for(String r:resources){if(PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r))androidPermissions.add(android.Manifest.permission.RECORD_AUDIO);if(PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r))androidPermissions.add(android.Manifest.permission.CAMERA);}if(androidPermissions.isEmpty()){new AlertDialog.Builder(this).setTitle("درخواست دسترسی سایت").setMessage("این سایت درخواست دسترسی به قابلیت دستگاه دارد. اجازه فقط برای همین درخواست داده می‌شود.").setPositiveButton("اجازه",(d,w)->request.grant(resources)).setNegativeButton("رد",(d,w)->request.deny()).show();return;}pendingWebPermissionRequest=request;new AlertDialog.Builder(this).setTitle("دسترسی صدا/دوربین").setMessage("سایت "+web.getUrl()+" درخواست استفاده از میکروفون یا دوربین دارد. فقط اگر تماس یا قابلیت صوتی/تصویری را خودتان شروع کرده‌اید اجازه دهید.").setPositiveButton("ادامه",(d,w)->{ArrayList<String> missing=new ArrayList<>();for(String p:androidPermissions)if(androidx.core.content.ContextCompat.checkSelfPermission(this,p)!=android.content.pm.PackageManager.PERMISSION_GRANTED)missing.add(p);if(missing.isEmpty())grantPendingWebPermission();else requestPermissions(missing.toArray(new String[0]),4201);}).setNegativeButton("رد",(d,w)->{pendingWebPermissionRequest=null;request.deny();}).show();}
@@ -783,8 +793,49 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
     private void promptDownload(String url,String name){pendingDownloadUrl=url;pendingDownloadName=safeFileName(name);EditText e=new EditText(this);e.setSingleLine(true);e.setText(pendingDownloadName);new AlertDialog.Builder(this).setTitle("دانلود فایل").setMessage("نام فایل را بررسی کنید؛ برای انتخاب محل ذخیره ادامه دهید.").setView(e).setPositiveButton("انتخاب محل ذخیره",(d,w)->{pendingDownloadName=safeFileName(e.getText().toString());launchDownloadSave();}).setNeutralButton("پوشه Downloads",(d,w)->{pendingDownloadName=safeFileName(e.getText().toString());startDownloadManager();}).setNegativeButton("لغو",null).show();}
     private void launchDownloadSave(){String ext="";int p=pendingDownloadName.lastIndexOf('.');if(p>=0)ext=pendingDownloadName.substring(p+1).toLowerCase(Locale.ROOT);String mime=URLConnection.guessContentTypeFromName(pendingDownloadName);if(mime==null)mime="application/octet-stream";Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType(mime);i.putExtra(Intent.EXTRA_TITLE,pendingDownloadName);try{startActivityForResult(i,REQ_SAVE_DOWNLOAD);}catch(Exception e){startDownloadManager();}}
     private void startDownloadManager(){try{DownloadManager dm=(DownloadManager)getSystemService(DOWNLOAD_SERVICE);DownloadManager.Request r=new DownloadManager.Request(Uri.parse(pendingDownloadUrl));r.setTitle(pendingDownloadName);r.setDescription("FastDesk Browser");r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);String cookie=CookieManager.getInstance().getCookie(pendingDownloadUrl);if(cookie!=null)r.addRequestHeader("Cookie",cookie);r.addRequestHeader("User-Agent",web.getSettings().getUserAgentString());r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,pendingDownloadName);dm.enqueue(r);Toast.makeText(this,"دانلود به پوشه Downloads فرستاده شد",Toast.LENGTH_LONG).show();}catch(Exception e){Toast.makeText(this,"شروع دانلود ممکن نشد: "+e.getMessage(),Toast.LENGTH_LONG).show();}}
-    private void downloadDetectedOrPrompt(){if(detectedMediaUrl==null||detectedMediaUrl.isEmpty()){Toast.makeText(this,"هنوز لینک مستقیم رسانه‌ای شناسایی نشده است؛ ممکن است سایت لینک را پنهان یا محافظت کرده باشد.",Toast.LENGTH_LONG).show();return;}promptDownload(detectedMediaUrl,guessName(detectedMediaUrl,null));}
-    private void setVideoReady(boolean ready){if(downloadButton==null)return;if(ready){downloadButton.setText("⬇ ویدیو آماده");downloadButton.setTextColor(0xffa00000);AlphaAnimation a=new AlphaAnimation(0.35f,1f);a.setDuration(600);a.setRepeatMode(AlphaAnimation.REVERSE);a.setRepeatCount(AlphaAnimation.INFINITE);downloadButton.startAnimation(a);status.setText("رسانه قابل‌شناسایی پیدا شد؛ دکمه دانلود را بزنید.");}else{downloadButton.clearAnimation();downloadButton.setText("دانلود");}}
+    private boolean isMediaCandidate(String value){
+        if(value==null||!(value.startsWith("http://")||value.startsWith("https://")))return false;
+        String u=value.toLowerCase(Locale.ROOT);
+        return u.matches(".*\\.(mp4|m4v|webm|mov|mkv|m3u8|mpd|mp3|m4a|aac|ogg|opus|wav|flac)(\\?.*)?($|#.*)")
+                || u.contains("videoplayback") || u.contains("/video/") || u.contains("/stream/")
+                || u.contains("manifest.mpd") || u.contains("playlist.m3u8") || u.contains("mime=video")
+                || u.contains("type=video") || u.contains("format=mp4");
+    }
+    private void downloadDetectedOrPrompt(){
+        if(web==null){return;}
+        // Ask the page's Performance API for resources too; this often reveals media URLs
+        // whose paths do not end in .mp4/.m3u8. It cannot bypass DRM or site access controls.
+        web.evaluateJavascript("(function(){try{return JSON.stringify(performance.getEntriesByType('resource').map(function(x){return x.name}).filter(function(u){return /\\.(mp4|m4v|webm|mov|mkv|m3u8|mpd|mp3|m4a|aac|ogg|opus|wav|flac)([?#].*)?$|videoplayback|manifest\\.mpd|playlist\\.m3u8|mime=video|type=video|format=mp4/i.test(u)}).slice(-80))}catch(e){return '[]'}})()", result->{
+            try{String raw=result==null?"\"[]\"":result; String json=raw;
+                if(raw.startsWith("\"")&&raw.endsWith("\"")){json=org.json.JSONObject.quote("").equals(raw)?"[]":new org.json.JSONTokener(raw).nextValue().toString();}
+                org.json.JSONArray arr=new org.json.JSONArray(json);
+                synchronized(detectedMediaUrls){for(int i=0;i<arr.length();i++){String u=arr.optString(i,"");if(isMediaCandidate(u))detectedMediaUrls.add(u);} while(detectedMediaUrls.size()>80){Iterator<String> it=detectedMediaUrls.iterator();if(it.hasNext()){it.next();it.remove();}}}
+            }catch(Exception ignored){}
+            showDetectedMediaChoices();
+        });
+    }
+    private void showDetectedMediaChoices(){
+        ArrayList<String> choices=new ArrayList<>();
+        synchronized(detectedMediaUrls){choices.addAll(detectedMediaUrls);}
+        if(choices.isEmpty()){
+            new AlertDialog.Builder(this).setTitle("ساخت لینک دانلود ویدیو")
+                .setMessage("هنوز نشانی قابل‌استفاده‌ای پیدا نشد. ویدیو را در صفحه پخش کنید و دوباره بزنید. بعضی سایت‌ها لینک را پنهان می‌کنند یا از DRM استفاده می‌کنند؛ در این موارد ساخت لینک مستقیم ممکن نیست.")
+                .setPositiveButton("تلاش دوباره",(d,w)->downloadDetectedOrPrompt()).setNegativeButton("بستن",null).show();
+            return;
+        }
+        String[] labels=new String[choices.size()];
+        for(int i=0;i<choices.size();i++){String u=choices.get(i);String name=guessName(u,null);labels[i]=(i==choices.size()-1?"● ":"")+name+"\n"+u;}
+        new AlertDialog.Builder(this).setTitle("رسانه‌های شناسایی‌شده — انتخاب لینک")
+            .setItems(labels,(d,which)->{String u=choices.get(which);new AlertDialog.Builder(this).setTitle("لینک رسانه")
+                .setItems(new String[]{"دانلود رسانه","کپی لینک","استفاده از آخرین لینک"},(dd,action)->{
+                    if(action==0)promptDownload(u,guessName(u,null));
+                    else if(action==1){((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("media url",u));Toast.makeText(this,"لینک کپی شد",Toast.LENGTH_SHORT).show();}
+                    else{detectedMediaUrl=u;promptDownload(u,guessName(u,null));}
+                }).setNegativeButton("لغو",null).show();})
+            .setNeutralButton("پاک‌کردن فهرست",(d,w)->{synchronized(detectedMediaUrls){detectedMediaUrls.clear();}detectedMediaUrl="";setVideoReady(false);})
+            .setNegativeButton("بستن",null).show();
+    }
+    private void setVideoReady(boolean ready){if(downloadButton==null)return;if(ready){downloadButton.setText("ساخت لینک •");downloadButton.setTextColor(0xffffffcc);status.setText("رسانه‌هایی شناسایی شده‌اند؛ برای ساخت لینک بزنید.");}else{downloadButton.clearAnimation();downloadButton.setText("ساخت لینک");downloadButton.setTextColor(Color.WHITE);}}
     private String guessName(String url,String disposition){if(url!=null&&url.toLowerCase(Locale.ROOT).contains(".m3u8"))return "video.ts";if(disposition!=null){java.util.regex.Matcher m=java.util.regex.Pattern.compile("filename\\*=UTF-8''([^;]+)|filename=\\\"?([^;\\\"]+)\\\"?",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(disposition);if(m.find()){String n=m.group(1)!=null?m.group(1):m.group(2);try{return Uri.decode(n);}catch(Exception ignored){return n;}}}try{String path=Uri.parse(url).getLastPathSegment();if(path!=null&&!path.isEmpty())return path;}catch(Exception ignored){}return "download_"+System.currentTimeMillis();}
     private String safeFileName(String s){if(s==null||s.trim().isEmpty())s="download";s=s.replaceAll("[\\\\/:*?\"<>|]","_").trim();if(s.length()>120)s=s.substring(0,120);return s;}
     private void chooseUploads(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);startActivityForResult(i,REQ_UPLOAD);}
