@@ -143,17 +143,9 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         progress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setProgress(0);
         toolbar = new LinearLayout(this); toolbar.setVisibility(View.GONE);
         status = new TextView(this); status.setVisibility(View.GONE); status.setTextSize(11);
-        // Treat the top status/message strip as a temporary notification: hide it 3 seconds after each new message.
-        status.addTextChangedListener(new android.text.TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                handler.removeCallbacks(hideStatusMessage);
-                status.setVisibility(fullScreenEnabled ? View.GONE : View.VISIBLE);
-                if (!fullScreenEnabled) handler.postDelayed(hideStatusMessage, 3000);
-            }
-            @Override public void afterTextChanged(android.text.Editable e) {}
-        });
-        handler.postDelayed(hideStatusMessage, 3000);
+        // Browser status text is kept out of the page/search area. Navigation and
+        // profile changes must never create a banner that covers the address bar or page.
+        status.setVisibility(View.GONE);
         web = new WebView(this);
         registerForContextMenu(web);
         // Use WebView's native pinch-to-zoom handling. Do not intercept touch events here:
@@ -455,7 +447,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         s.setSupportMultipleWindows(false); s.setJavaScriptCanOpenWindowsAutomatically(true);
         applyUserAgent(); web.addJavascriptInterface(new PageBridge(),"MiniWinBridge");
         web.setWebViewClient(new WebViewClient(){
-            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){updateAddress(url);setOnlineTitle();progress.setVisibility(fullScreenEnabled?View.GONE:View.VISIBLE);progress.setProgress(5);status.setText("در حال بارگذاری… | "+networkDescription());}
+            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){applyAutomaticSiteProfile(url);updateAddress(url);setOnlineTitle();progress.setVisibility(fullScreenEnabled?View.GONE:View.VISIBLE);progress.setProgress(5);}
             @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); status.setText("آماده"); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) { enforceDesktopViewport(); web.getSettings().setLoadWithOverviewMode(false); }if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error){super.onReceivedError(view,request,error);if(request.isForMainFrame()){progress.setVisibility(View.GONE);if(!isOnline())setOfflineUi();else{appName.setText("🌐  FastDesk Browser");status.setText("خطا در بازکردن سایت: "+error.getDescription()+" | برای تلاش دوباره بارگذاری کنید");}}}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){super.onReceivedHttpError(view,request,response);if(request.isForMainFrame())status.setText("پاسخ سایت: HTTP "+response.getStatusCode()+" | "+networkDescription());}
@@ -697,14 +689,19 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         WebSettings settings=web.getSettings();
 
         boolean signIn = matchesHost(host,"accounts.google.com","login.live.com","login.microsoftonline.com",
-                "appleid.apple.com","auth0.com","okta.com","identity.microsoft.com","login.yahoo.com");
+                "appleid.apple.com","auth0.com","okta.com","identity.microsoft.com","login.yahoo.com",
+                "login.microsoft.com","signin.aws.amazon.com","id.atlassian.com","login.gov");
         boolean finance = matchesHost(host,"paypal.com","stripe.com","bankofamerica.com","chase.com",
-                "wellsfargo.com","capitalone.com","bank","banking");
+                "wellsfargo.com","capitalone.com","bank","banking","wise.com","revolut.com",
+                "cash.app","venmo.com");
         boolean productivity = matchesHost(host,"docs.google.com","sheets.google.com","slides.google.com",
-                "office.com","microsoft365.com","notion.so","figma.com","github.com","gitlab.com");
+                "drive.google.com","office.com","microsoft365.com","live.com","notion.so","figma.com",
+                "github.com","gitlab.com","atlassian.net","slack.com","trello.com","dropbox.com",
+                "onedrive.live.com","canva.com","linear.app");
         boolean media = matchesHost(host,"youtube.com","youtu.be","googlevideo.com","vimeo.com",
                 "dailymotion.com","instagram.com","facebook.com","tiktok.com","x.com","twitter.com",
-                "twitch.tv","soundcloud.com","spotify.com");
+                "twitch.tv","soundcloud.com","spotify.com","netflix.com","disneyplus.com","primevideo.com",
+                "reddit.com","pinterest.com");
 
         // Reapply the actual settings at each top-level navigation, not just when the
         // browser is first created. Never grant Android device permissions automatically.
@@ -730,7 +727,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             cookies.setAcceptCookie(true);
             // Sign-in and embedded media often need third-party cookies. Finance sites
             // keep them disabled as a safer default; the site can still request permissions.
-            cookies.setAcceptThirdPartyCookies(web,!finance && (signIn || media || !finance));
+            cookies.setAcceptThirdPartyCookies(web,!finance);
         }
         currentAutoProfile = finance ? "مالی (کوکی شخص ثالث محدود)"
                 : signIn ? "ورود و حساب کاربری"
