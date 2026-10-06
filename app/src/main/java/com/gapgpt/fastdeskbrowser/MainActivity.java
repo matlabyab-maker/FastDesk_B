@@ -78,7 +78,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         prefs = getSharedPreferences("browser", MODE_PRIVATE);
         textOnly = prefs.getBoolean("textOnly", false);
-        desktopMode = prefs.getBoolean("desktop", false);
+        desktopMode = prefs.contains("desktop") ? prefs.getBoolean("desktop", true) : true;
         compactToolbar = prefs.getBoolean("compact", false);
         searchTemplate = prefs.getString("searchTemplate", searchTemplate);
         buildUi();
@@ -108,13 +108,10 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         TextView setupButton = xpButton("Setup"); setupButton.setTextColor(Color.WHITE); setupButton.setTextSize(11); setupButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
         mouseCursorButton = xpButton("🖱 Mouse"); mouseCursorButton.setTextColor(Color.WHITE); mouseCursorButton.setTextSize(11); mouseCursorButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
         copyButton = xpButton("Copy Mini Win"); copyButton.setTextColor(Color.WHITE); copyButton.setTextSize(10); copyButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
-        TextView homeTop = xpButton("⌂"); homeTop.setTextSize(18); homeTop.setContentDescription("صفحه خانه");
-        title.addView(homeTop,new LinearLayout.LayoutParams(dp(38),dp(34)));
         title.addView(toolButton,new LinearLayout.LayoutParams(dp(52),dp(34)));
         title.addView(setupButton,new LinearLayout.LayoutParams(dp(58),dp(34)));
         LinearLayout.LayoutParams mouseTitleParams = new LinearLayout.LayoutParams(dp(74),dp(34)); mouseTitleParams.setMargins(dp(2),0,dp(2),0); title.addView(mouseCursorButton,mouseTitleParams);
         title.addView(copyButton,new LinearLayout.LayoutParams(dp(72),dp(34)));
-        homeTop.setOnClickListener(v -> showHome());
         toolButton.setOnClickListener(v -> showToolMenu()); setupButton.setOnClickListener(v -> showSettings()); mouseCursorButton.setOnClickListener(v -> toggleMouseWindow()); copyButton.setOnClickListener(v -> toggleCopyMode());
         TextView mini = xpButton("—"); TextView max = xpButton("□"); TextView close = xpButton("×");
         title.addView(mini); title.addView(max); title.addView(close);
@@ -164,7 +161,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         applyUserAgent();
         if (web != null) {
             web.stopLoading();
-            web.setInitialScale(desktopMode ? 100 : 0);
+            web.setInitialScale(0);
             web.clearFocus();
             String u = web.getUrl();
             if (u != null && !u.isEmpty()) web.reload();
@@ -187,19 +184,22 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
     }
 
     private void showMouseWindow() {
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
+        FrameLayout panel = new FrameLayout(this);
         panel.setBackground(borderDrawable(0xffece9d8,0xff142b57));
         panel.setPadding(dp(3),dp(3),dp(3),dp(3));
         TextView pad = new TextView(this); pad.setText("ناحیه حرکت نشانگر\nانگشت را بکشید"); pad.setGravity(Gravity.CENTER); pad.setTextColor(0xff23466f); pad.setTextSize(14);
         pad.setBackground(borderDrawable(0xfff9fbff,0xff9ab3d0));
-        LinearLayout.LayoutParams padParams = new LinearLayout.LayoutParams(-1,0,1); padParams.setMargins(dp(5),dp(5),dp(5),dp(4)); panel.addView(pad,padParams);
-        LinearLayout controls = new LinearLayout(this); controls.setGravity(Gravity.CENTER); controls.setPadding(dp(4),dp(0),dp(4),dp(4));
+        FrameLayout.LayoutParams padParams = new FrameLayout.LayoutParams(-1,-1);
+        padParams.setMargins(dp(5),dp(5),dp(5),dp(51));
+        panel.addView(pad,padParams);
+        LinearLayout controls = new LinearLayout(this); controls.setOrientation(LinearLayout.HORIZONTAL); controls.setGravity(Gravity.CENTER_VERTICAL);
+        controls.setPadding(dp(4),0,dp(4),dp(4));
+        FrameLayout.LayoutParams controlParams = new FrameLayout.LayoutParams(-1,dp(47),Gravity.BOTTOM);
+        panel.addView(controls,controlParams);
         TextView left = xpButton("کلیک چپ"); left.setTextSize(14); controls.addView(left,new LinearLayout.LayoutParams(0,dp(42),1));
         TextView recenter = xpButton("مرکز"); controls.addView(recenter,new LinearLayout.LayoutParams(dp(62),dp(42)));
         TextView resize = xpButton("↘ تغییر اندازه"); resize.setTextSize(11); controls.addView(resize,new LinearLayout.LayoutParams(dp(94),dp(42)));
         TextView drag = xpButton("☰ درگ"); drag.setTextSize(11); controls.addView(drag,new LinearLayout.LayoutParams(dp(58),dp(42)));
-        panel.addView(controls);
         mouseWindowWidth=270; mouseWindowHeight=255; mouseWindow = new PopupWindow(panel,dp(mouseWindowWidth),dp(mouseWindowHeight),false);
         mouseWindow.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         mouseWindow.setOutsideTouchable(false); mouseWindow.setTouchable(true); mouseWindow.setClippingEnabled(true);
@@ -290,7 +290,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         SeekBar height=new SeekBar(this);height.setMax(300);height.setProgress(100);box.addView(height);
         new AlertDialog.Builder(this).setTitle("تغییر اندازه پنجره شناور").setView(box).setPositiveButton("اعمال",(d,w)->{
             int nw=Math.max(dp(238),dp(170+width.getProgress()));
-            int nh=Math.max(dp(150),dp(180+height.getProgress()));
+            int nh=Math.max(dp(112),dp(180+height.getProgress()));
             mouseWindowWidth=(int)Math.ceil(nw/getResources().getDisplayMetrics().density);
             mouseWindowHeight=(int)Math.ceil(nh/getResources().getDisplayMetrics().density);
             if(mouseWindow!=null&&mouseWindow.isShowing()){
@@ -336,13 +336,13 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
 
     private void configureWebView() {
         WebSettings s=web.getSettings(); s.setJavaScriptEnabled(prefs.getBoolean("javascript", true)); s.setDomStorageEnabled(true); s.setDatabaseEnabled(true); s.setSupportMultipleWindows(false);
-        s.setLoadsImagesAutomatically(!textOnly); s.setBlockNetworkImage(textOnly); s.setMediaPlaybackRequiresUserGesture(false); s.setBuiltInZoomControls(true); s.setDisplayZoomControls(false); s.setSupportZoom(true); s.setAllowFileAccess(false); s.setAllowContentAccess(true); s.setCacheMode(prefs.getBoolean("noCache", false) ? WebSettings.LOAD_NO_CACHE : WebSettings.LOAD_CACHE_ELSE_NETWORK);
+        s.setLoadsImagesAutomatically(!textOnly); s.setBlockNetworkImage(textOnly); s.setMediaPlaybackRequiresUserGesture(false); s.setSupportZoom(true); s.setBuiltInZoomControls(true); s.setDisplayZoomControls(false); s.setAllowFileAccess(false); s.setAllowContentAccess(true); s.setCacheMode(prefs.getBoolean("noCache", false) ? WebSettings.LOAD_NO_CACHE : WebSettings.LOAD_CACHE_ELSE_NETWORK);
         if(Build.VERSION.SDK_INT >= 21) { s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE); CookieManager.getInstance().setAcceptThirdPartyCookies(web, true); }
         s.setSupportMultipleWindows(false); s.setJavaScriptCanOpenWindowsAutomatically(true);
         applyUserAgent(); web.addJavascriptInterface(new PageBridge(),"MiniWinBridge");
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){updateAddress(url);setOnlineTitle();progress.setVisibility(fullScreenEnabled?View.GONE:View.VISIBLE);progress.setProgress(5);status.setText("در حال بارگذاری… | "+networkDescription());}
-            @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); status.setText("بارگذاری تمام شد | "+networkDescription()+(textOnly?" | فقط متن":"")); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) enforceDesktopViewport();if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
+            @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); status.setText("بارگذاری تمام شد | "+networkDescription()+(textOnly?" | فقط متن":"")); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) { enforceDesktopViewport(); web.getSettings().setLoadWithOverviewMode(false); }if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error){super.onReceivedError(view,request,error);if(request.isForMainFrame()){progress.setVisibility(View.GONE);if(!isOnline())setOfflineUi();else{appName.setText("🌐  FastDesk Browser");status.setText("خطا در بازکردن سایت: "+error.getDescription()+" | برای تلاش دوباره بارگذاری کنید");}}}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){super.onReceivedHttpError(view,request,response);if(request.isForMainFrame())status.setText("پاسخ سایت: HTTP "+response.getStatusCode()+" | "+networkDescription());}
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){String u=req.getUrl().toString(); if(u.startsWith("http://")||u.startsWith("https://")) return false; try { Intent i=new Intent(Intent.ACTION_VIEW, Uri.parse(u)); startActivity(i); } catch(Exception ignored) { Toast.makeText(MainActivity.this,"برنامه‌ای برای بازکردن این پیوند پیدا نشد",Toast.LENGTH_SHORT).show(); } return true;}
@@ -535,9 +535,10 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
             // Use a complete desktop Chrome UA rather than trying to rewrite Android's UA.
             s.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
             s.setUseWideViewPort(true);
-            s.setLoadWithOverviewMode(false);
+            s.setLoadWithOverviewMode(true);
             s.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.NORMAL);
-            web.setInitialScale(100);
+            // Fit the full desktop-width page into the available screen, like a desktop browser overview.
+            web.setInitialScale(0);
             s.setSupportZoom(true);
             s.setBuiltInZoomControls(true);
             s.setDisplayZoomControls(false);
@@ -546,6 +547,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
             s.setUseWideViewPort(true);
             s.setLoadWithOverviewMode(true);
             s.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
+            web.setInitialScale(0);
         }
     }
     private void enforceDesktopViewport(){
@@ -553,7 +555,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         String js="(function(){try{"
                 +"var m=document.querySelector(\"meta[name=\\\'viewport\\\"]\");"
                 +"if(!m){m=document.createElement(\"meta\");m.name=\"viewport\";(document.head||document.documentElement).appendChild(m);}"
-                +"m.setAttribute(\"content\",\"width=1024, initial-scale=1, minimum-scale=0.25, maximum-scale=5, user-scalable=yes\");"
+                +"m.setAttribute(\"content\",\"width=1024, initial-scale=1, minimum-scale=0.10, maximum-scale=10, user-scalable=yes\");"
                 +"document.documentElement.style.minWidth=\"1024px\";"
                 +"document.body.style.minWidth=\"1024px\";"
                 +"}catch(e){}})()";
