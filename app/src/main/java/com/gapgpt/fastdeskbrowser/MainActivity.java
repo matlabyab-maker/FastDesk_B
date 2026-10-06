@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
     private PopupWindow mouseWindow;
     private int mouseWindowWidth = 270;
     private int mouseWindowHeight = 255;
+    private final int[] mousePopupPosition = {0, 0};
     private PopupWindow fullScreenExitWindow;
     private TextView mouseCursorButton;
     private float pageMouseX = 0.5f, pageMouseY = 0.35f;
@@ -93,7 +94,7 @@ public class MainActivity extends Activity {
     private void buildUi() {
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.rgb(236,233,216));
         // Windows XP title bar
-        titleBar = new LinearLayout(this); LinearLayout title = titleBar; title.setGravity(Gravity.CENTER_VERTICAL); title.setPadding(dp(8),dp(5),dp(6),dp(5));
+        titleBar = new LinearLayout(this); LinearLayout title = titleBar; title.setGravity(Gravity.CENTER_VERTICAL); title.setPadding(dp(3),dp(1),dp(2),dp(1));
         title.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xff0a59d5,0xff3a91ff,0xff0750b5}));
         ImageView xpIcon = new ImageView(this);
         xpIcon.setImageResource(com.gapgpt.fastdeskbrowser.R.drawable.ic_desktop_browser);
@@ -119,7 +120,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         max.setOnClickListener(v -> cycleWindowSize());
         close.setOnClickListener(v -> finish()); root.addView(title);
 
-        navBar = new LinearLayout(this); LinearLayout nav = navBar; nav.setPadding(dp(5),dp(5),dp(5),dp(4)); nav.setGravity(Gravity.CENTER_VERTICAL); nav.setBackgroundColor(0xffece9d8);
+        navBar = new LinearLayout(this); LinearLayout nav = navBar; nav.setPadding(dp(2),dp(1),dp(2),dp(1)); nav.setGravity(Gravity.CENTER_VERTICAL); nav.setBackgroundColor(0xffece9d8);
         TextView back = xpButton("◀  عقب"); TextView forward = xpButton("جلو  ▶"); back.setTextSize(15); forward.setTextSize(15);
         nav.addView(back,new LinearLayout.LayoutParams(dp(92),dp(45))); nav.addView(forward,new LinearLayout.LayoutParams(dp(92),dp(45)));
         back.setOnClickListener(v -> { if(web.canGoBack()) web.goBack(); }); forward.setOnClickListener(v -> { if(web.canGoForward()) web.goForward(); });
@@ -128,8 +129,8 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         nav.addView(address,new LinearLayout.LayoutParams(0,dp(42),1));
         TextView go = xpButton("برو"); nav.addView(go,new LinearLayout.LayoutParams(dp(48),dp(42)));
         go.setOnClickListener(v -> navigateFromAddress()); address.setOnEditorActionListener((v,action,event)->{navigateFromAddress();return true;});
-        tabStrip = new LinearLayout(this); tabStrip.setOrientation(LinearLayout.HORIZONTAL); tabStrip.setGravity(Gravity.CENTER_VERTICAL); tabStrip.setPadding(dp(3),dp(2),dp(3),dp(2)); tabStrip.setBackgroundColor(0xffd6d2c4);
-        root.addView(tabStrip,new LinearLayout.LayoutParams(-1,dp(34)));
+        tabStrip = new LinearLayout(this); tabStrip.setOrientation(LinearLayout.HORIZONTAL); tabStrip.setGravity(Gravity.CENTER_VERTICAL); tabStrip.setPadding(dp(1),0,dp(1),0); tabStrip.setBackgroundColor(0xffd6d2c4);
+        root.addView(tabStrip,new LinearLayout.LayoutParams(-1,dp(30)));
         root.addView(nav);
         progress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setProgress(0);
         toolbar = new LinearLayout(this); toolbar.setVisibility(View.GONE);
@@ -203,17 +204,27 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         mouseWindowWidth=270; mouseWindowHeight=255; mouseWindow = new PopupWindow(panel,dp(mouseWindowWidth),dp(mouseWindowHeight),false);
         mouseWindow.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         mouseWindow.setOutsideTouchable(false); mouseWindow.setTouchable(true); mouseWindow.setClippingEnabled(true);
-        final int[] popupPos = {Math.max(0, getResources().getDisplayMetrics().widthPixels-dp(282)), dp(100)};
+        mousePopupPosition[0] = Math.max(0, getResources().getDisplayMetrics().widthPixels-dp(mouseWindowWidth));
+        mousePopupPosition[1] = dp(100);
+        final int[] popupPos = mousePopupPosition;
         mouseWindow.setOnDismissListener(() -> hidePagePointer());
         mouseWindow.showAtLocation(root,Gravity.TOP|Gravity.START,popupPos[0],popupPos[1]);
         mouseCursorButton.setText("🖱 باز");
         final float[] dragStart = {0f,0f};
         final int[] dragOrigin = {popupPos[0],popupPos[1]};
+        final int[] dragDownScreen = {0,0};
+        final int[] rootScreen = {0,0};
         drag.setOnTouchListener((v,e)->{
             switch(e.getActionMasked()){
                 case MotionEvent.ACTION_DOWN:
                     dragStart[0]=e.getRawX(); dragStart[1]=e.getRawY();
                     dragOrigin[0]=popupPos[0]; dragOrigin[1]=popupPos[1];
+                    panel.getLocationOnScreen(dragDownScreen);
+                    root.getLocationOnScreen(rootScreen);
+                    // Rebase from the popup's actual on-screen position after any resize.
+                    dragOrigin[0]=dragDownScreen[0]-rootScreen[0];
+                    dragOrigin[1]=dragDownScreen[1]-rootScreen[1];
+                    popupPos[0]=dragOrigin[0]; popupPos[1]=dragOrigin[1];
                     return true;
                 case MotionEvent.ACTION_MOVE:
                     int nx=(int)(dragOrigin[0]+e.getRawX()-dragStart[0]);
@@ -296,7 +307,10 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
             if(mouseWindow!=null&&mouseWindow.isShowing()){
                 int sw=getResources().getDisplayMetrics().widthPixels;
                 int sh=getResources().getDisplayMetrics().heightPixels;
+                mousePopupPosition[0]=Math.max(0,Math.min(mousePopupPosition[0],Math.max(0,sw-dp(mouseWindowWidth))));
+                mousePopupPosition[1]=Math.max(0,Math.min(mousePopupPosition[1],Math.max(0,sh-dp(mouseWindowHeight))));
                 popupPosClampAndUpdate(sw,sh);
+                mouseWindow.update(mousePopupPosition[0],mousePopupPosition[1],-1,-1);
             }
         }).setNegativeButton("لغو",null).show();
     }
