@@ -456,15 +456,19 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){super.onReceivedHttpError(view,request,response);if(request.isForMainFrame())status.setText("پاسخ سایت: HTTP "+response.getStatusCode()+" | "+networkDescription());}
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){
                 String u=req.getUrl().toString();
-                if(req.isForMainFrame()) applyAutomaticSiteProfile(u);
-                if(isGoogleAccountAuthUrl(u)){ openGoogleSignInExternally(u); return true; }
+                if(req.isForMainFrame()) {
+                    // Google blocks many account sign-ins in embedded WebViews. Open account/auth pages
+                    // directly in the installed browser, without presenting a chooser dialog.
+                    if(isGoogleAccountUrl(u)) { openGoogleAccountPage(u); return true; }
+                    applyAutomaticSiteProfile(u);
+                }
                 if(u.startsWith("http://")||u.startsWith("https://")) return false;
                 openExternalAppLink(u);
                 return true;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,String url){
                 if(url==null)return false;
-                if(isGoogleAccountAuthUrl(url)){ openGoogleSignInExternally(url); return true; }
+                if(isGoogleAccountUrl(url)) { openGoogleAccountPage(url); return true; }
                 if(url.startsWith("http://")||url.startsWith("https://"))return false;
                 openExternalAppLink(url);
                 return true;
@@ -526,42 +530,49 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         }
     }
 
-    // Google blocks sign-in flows inside many embedded WebViews. Use the user's installed
-    // browser for the official Google authentication flow rather than trying to bypass it.
-    private boolean isGoogleAccountAuthUrl(String value){
+    private boolean isGoogleAccountUrl(String value){
         try {
-            Uri u=Uri.parse(value);
-            String host=u.getHost();
-            if(host==null)return false;
-            host=host.toLowerCase(Locale.ROOT);
-            String path=(u.getPath()==null?"":u.getPath()).toLowerCase(Locale.ROOT);
-            return host.equals("accounts.google.com")
-                    || host.equals("accounts.youtube.com")
-                    || (host.equals("myaccount.google.com") && (path.contains("signin") || path.contains("login")))
-                    || (host.equals("google.com") || host.endsWith(".google.com"))
-                       && (path.startsWith("/signin/") || path.startsWith("/servicelogin") || path.startsWith("/o/oauth2/") || path.startsWith("/oauth2/"));
+            Uri u=Uri.parse(value); String h=u.getHost();
+            if(h==null || !("http".equalsIgnoreCase(u.getScheme()) || "https".equalsIgnoreCase(u.getScheme()))) return false;
+            h=h.toLowerCase(Locale.ROOT);
+            return h.equals("accounts.google.com") || h.equals("myaccount.google.com")
+                    || h.equals("account.google.com") || h.equals("login.google.com");
         } catch(Exception ignored){ return false; }
     }
 
-    private void openGoogleSignInExternally(String url){
-        // Keep FastDesk in the user's choices as well as installed external browsers.
-        // Some sign-in providers reject WebView, so external browser remains the recommended path.
-        new AlertDialog.Builder(this)
-            .setTitle("انتخاب مرورگر برای ورود")
-            .setMessage("می‌توانید همین صفحه را در FastDesk باز کنید یا یک مرورگر خارجی را انتخاب کنید. بعضی سرویس‌ها ورود داخل مرورگر داخلی را نمی‌پذیرند.")
-            .setItems(new String[]{"FastDesk Browser (همین مرورگر)","انتخاب مرورگر خارجی نصب‌شده…"},(dialog,which)->{
-                if(which==0){ loadUrl(url); return; }
-                try {
-                    Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(url));
-                    intent.addCategory(Intent.CATEGORY_BROWSABLE);
-                    startActivity(Intent.createChooser(intent,"بازکردن صفحه با مرورگر"));
-                } catch(Exception e){
-                    new AlertDialog.Builder(this).setTitle("مرورگر خارجی پیدا نشد")
-                        .setMessage("می‌توانید با FastDesk ادامه دهید یا یک مرورگر نصب کنید.")
-                        .setPositiveButton("ادامه با FastDesk",(d,w)->loadUrl(url))
-                        .setNegativeButton("بستن",null).show();
-                }
-            }).setNegativeButton("لغو",null).show();
+    private void openGoogleAccountPage(String value){
+        if(value==null || value.trim().isEmpty()) return;
+        Uri uri;
+        try { uri=Uri.parse(value); } catch(Exception e) { return; }
+        // Google sign-in/account management is not reliably supported inside Android WebView.
+        // Launch a real installed browser explicitly. Do NOT fall back to an implicit ACTION_VIEW:
+        // that can select FastDesk itself and create the repeated "choose browser" dialog loop.
+        String[] supportedBrowsers = {
+            "com.android.chrome",
+            "org.mozilla.firefox",
+            "com.microsoft.emmx",
+            "com.sec.android.app.sbrowser",
+            "com.brave.browser",
+            "com.opera.browser"
+        };
+        for(String packageName : supportedBrowsers){
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                intent.setPackage(packageName);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                return;
+            } catch(android.content.ActivityNotFoundException ignored) {
+                // Try the next known browser without opening a chooser.
+            } catch(Exception ignored) {
+                // A browser may be installed but unavailable; continue to the next one.
+            }
+        }
+        // If no supported browser is installed, stay in FastDesk rather than reopening itself
+        // through Android's generic browser chooser.
+        try { status.setText("برای ورود به حساب گوگل، Chrome یا یک مرورگر پشتیبانی‌شده نصب کنید."); }
+        catch(Exception ignored) {}
     }
 
     private void askWebPermission(PermissionRequest request){String[] resources=request.getResources();ArrayList<String> androidPermissions=new ArrayList<>();for(String r:resources){if(PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r))androidPermissions.add(android.Manifest.permission.RECORD_AUDIO);if(PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r))androidPermissions.add(android.Manifest.permission.CAMERA);}if(androidPermissions.isEmpty()){new AlertDialog.Builder(this).setTitle("درخواست دسترسی سایت").setMessage("این سایت درخواست دسترسی به قابلیت دستگاه دارد. اجازه فقط برای همین درخواست داده می‌شود.").setPositiveButton("اجازه",(d,w)->request.grant(resources)).setNegativeButton("رد",(d,w)->request.deny()).show();return;}pendingWebPermissionRequest=request;new AlertDialog.Builder(this).setTitle("دسترسی صدا/دوربین").setMessage("سایت "+web.getUrl()+" درخواست استفاده از میکروفون یا دوربین دارد. فقط اگر تماس یا قابلیت صوتی/تصویری را خودتان شروع کرده‌اید اجازه دهید.").setPositiveButton("ادامه",(d,w)->{ArrayList<String> missing=new ArrayList<>();for(String p:androidPermissions)if(androidx.core.content.ContextCompat.checkSelfPermission(this,p)!=android.content.pm.PackageManager.PERMISSION_GRANTED)missing.add(p);if(missing.isEmpty())grantPendingWebPermission();else requestPermissions(missing.toArray(new String[0]),4201);}).setNegativeButton("رد",(d,w)->{pendingWebPermissionRequest=null;request.deny();}).show();}
