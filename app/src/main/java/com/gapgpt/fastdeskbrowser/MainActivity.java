@@ -391,48 +391,48 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
     @Override public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
         super.onCreateContextMenu(menu, v, menuInfo);
         if (v != web || web == null) return;
+
         WebView.HitTestResult hit = web.getHitTestResult();
         if (hit == null) return;
+
         final int type = hit.getType();
-        String extra = hit.getExtra();
         final String pageUrl = web.getUrl();
-        final String title = web.getTitle();
-        String mediaUrl = extra == null ? "" : extra.trim();
-        // On some WebView versions a long-pressed image/media is exposed through
-        // requestFocusNodeHref rather than HitTestResult.getExtra().
-        if (mediaUrl.isEmpty() || type == WebView.HitTestResult.SRC_ANCHOR_TYPE) {
-            Message msg = web.obtainMessage();
-            web.requestFocusNodeHref(msg);
-            if (msg.getData() != null) {
-                Bundle data = msg.getData();
-                String src = data.getString("src");
-                String href = data.getString("url");
-                if (src != null && !src.trim().isEmpty() && (type == WebView.HitTestResult.IMAGE_TYPE || type == WebView.HitTestResult.SRC_IMAGE)) mediaUrl = src;
-                else if (mediaUrl.isEmpty() && href != null) mediaUrl = href;
-            }
-        }
-        final String target = mediaUrl;
+        String extra = hit.getExtra();
+        final String target = extra == null ? "" : extra.trim();
+
+        // Android's public HitTestResult API exposes image/link types, but not
+        // SRC_IMAGE, SRC_VIDEO, VIDEO_TYPE or WebView.obtainMessage().
+        // Detect media from the hit-test URL and common file extensions instead.
         boolean media = type == WebView.HitTestResult.IMAGE_TYPE
-                || type == WebView.HitTestResult.SRC_IMAGE
-                || type == WebView.HitTestResult.VIDEO_TYPE
-                || type == WebView.HitTestResult.SRC_VIDEO
-                || (target != null && isLikelyDownloadable(target));
-        if (target != null && !target.isEmpty() && (media || type == WebView.HitTestResult.SRC_ANCHOR_TYPE || type == WebView.HitTestResult.ANCHOR_TYPE)) {
+                || type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+                || (target.length() > 0 && isLikelyDownloadable(target));
+
+        if (!target.isEmpty() && (media
+                || type == WebView.HitTestResult.SRC_ANCHOR_TYPE
+                || type == WebView.HitTestResult.ANCHOR_TYPE)) {
             menu.setHeaderTitle(media ? "رسانه / فایل" : "پیوند");
             menu.add("⬇ دانلود…").setOnMenuItemClickListener(item -> {
                 promptDownload(target, guessName(target, null));
                 return true;
             });
             if (!media && (target.startsWith("http://") || target.startsWith("https://"))) {
-                menu.add("بازکردن پیوند").setOnMenuItemClickListener(item -> { loadUrl(target); return true; });
+                menu.add("بازکردن پیوند").setOnMenuItemClickListener(item -> {
+                    loadUrl(target);
+                    return true;
+                });
             }
             menu.add("دانلود صفحهٔ فعلی…").setOnMenuItemClickListener(item -> {
-                if (pageUrl != null && (pageUrl.startsWith("http://") || pageUrl.startsWith("https://"))) promptDownload(pageUrl, guessName(pageUrl, null));
+                if (pageUrl != null && (pageUrl.startsWith("http://") || pageUrl.startsWith("https://"))) {
+                    promptDownload(pageUrl, guessName(pageUrl, null));
+                }
                 return true;
             });
         } else if (type == WebView.HitTestResult.EDIT_TEXT_TYPE) {
             menu.setHeaderTitle("متن");
-            menu.add("انتخاب همه").setOnMenuItemClickListener(item -> { web.evaluateJavascript("(function(){var e=document.activeElement;if(e&&e.select)e.select();})()", null); return true; });
+            menu.add("انتخاب همه").setOnMenuItemClickListener(item -> {
+                web.evaluateJavascript("(function(){var e=document.activeElement;if(e&&e.select)e.select();})()", null);
+                return true;
+            });
         }
     }
 
