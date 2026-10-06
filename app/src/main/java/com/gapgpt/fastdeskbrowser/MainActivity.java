@@ -459,7 +459,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
                 if(req.isForMainFrame()) {
                     // Google blocks many account sign-ins in embedded WebViews. Open account/auth pages
                     // directly in the installed browser, without presenting a chooser dialog.
-                    if(isGoogleAccountUrl(u)) { openGoogleAccountPage(u); return true; }
+                    if(isSensitiveAuthUrl(u)) { openSensitiveAuthPage(u); return true; }
                     applyAutomaticSiteProfile(u);
                 }
                 if(u.startsWith("http://")||u.startsWith("https://")) return false;
@@ -468,7 +468,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,String url){
                 if(url==null)return false;
-                if(isGoogleAccountUrl(url)) { openGoogleAccountPage(url); return true; }
+                if(isSensitiveAuthUrl(url)) { openSensitiveAuthPage(url); return true; }
                 if(url.startsWith("http://")||url.startsWith("https://"))return false;
                 openExternalAppLink(url);
                 return true;
@@ -530,21 +530,22 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         }
     }
 
-    private boolean isGoogleAccountUrl(String value){
+    private boolean isSensitiveAuthUrl(String value){
         try {
             Uri u=Uri.parse(value); String h=u.getHost();
             if(h==null || !("http".equalsIgnoreCase(u.getScheme()) || "https".equalsIgnoreCase(u.getScheme()))) return false;
             h=h.toLowerCase(Locale.ROOT);
             return h.equals("accounts.google.com") || h.equals("myaccount.google.com")
-                    || h.equals("account.google.com") || h.equals("login.google.com");
+                    || h.equals("account.google.com") || h.equals("login.google.com")
+                    || h.equals("auth.openai.com") || h.equals("auth0.openai.com");
         } catch(Exception ignored){ return false; }
     }
 
-    private void openGoogleAccountPage(String value){
+    private void openSensitiveAuthPage(String value){
         if(value==null || value.trim().isEmpty()) return;
         Uri uri;
         try { uri=Uri.parse(value); } catch(Exception e) { return; }
-        // Google sign-in/account management is not reliably supported inside Android WebView.
+        // Sensitive sign-in pages (Google and OpenAI) may reject embedded WebViews.
         // Launch a real installed browser explicitly. Do NOT fall back to an implicit ACTION_VIEW:
         // that can select FastDesk itself and create the repeated "choose browser" dialog loop.
         String[] supportedBrowsers = {
@@ -571,7 +572,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         }
         // If no supported browser is installed, stay in FastDesk rather than reopening itself
         // through Android's generic browser chooser.
-        try { status.setText("برای ورود به حساب گوگل، Chrome یا یک مرورگر پشتیبانی‌شده نصب کنید."); }
+        try { status.setText("برای ورود امن، Chrome یا یک مرورگر پشتیبانی‌شده نصب کنید."); }
         catch(Exception ignored) {}
     }
 
