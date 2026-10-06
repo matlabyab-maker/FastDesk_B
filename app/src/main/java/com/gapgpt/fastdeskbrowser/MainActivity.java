@@ -41,12 +41,15 @@ public class MainActivity extends Activity {
     private boolean fullScreenEnabled = false;
     private TextView toolButton;
     private PopupWindow mouseWindow;
+    private PopupWindow screenPointerWindow;
+    private TextView screenPointerView;
     private int mouseWindowWidth = 270;
     private int mouseWindowHeight = 255;
     private final int[] mousePopupPosition = {0, 0};
     private PopupWindow fullScreenExitWindow;
     private TextView mouseCursorButton;
     private float pageMouseX = 0.5f, pageMouseY = 0.35f;
+    private float screenPointerX = 0.5f, screenPointerY = 0.35f;
     private boolean pageMouseReady = false;
     private long lastPointerUpdateMs = 0L;
     private float pendingPointerX = 0.5f, pendingPointerY = 0.35f;
@@ -94,7 +97,7 @@ public class MainActivity extends Activity {
     private void buildUi() {
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.rgb(236,233,216));
         // Windows XP title bar
-        titleBar = new LinearLayout(this); LinearLayout title = titleBar; title.setGravity(Gravity.CENTER_VERTICAL); title.setPadding(dp(3),dp(1),dp(2),dp(1));
+        titleBar = new LinearLayout(this); LinearLayout title = titleBar; title.setGravity(Gravity.CENTER_VERTICAL); title.setPadding(dp(2),0,dp(1),0);
         title.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xff0a59d5,0xff3a91ff,0xff0750b5}));
         ImageView xpIcon = new ImageView(this);
         xpIcon.setImageResource(com.gapgpt.fastdeskbrowser.R.drawable.ic_desktop_browser);
@@ -102,35 +105,35 @@ public class MainActivity extends Activity {
 xpIcon.setClickable(true);
 xpIcon.setFocusable(true);
 xpIcon.setOnClickListener(v -> toggleDesktopFromXpButton(xpIcon));
-title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
+title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         appName = new TextView(this); appName.setText("FastDesk Browser"); appName.setTextColor(Color.WHITE); appName.setTextSize(17); appName.setTypeface(null,1);
-        title.addView(appName,new LinearLayout.LayoutParams(0,dp(36),1));
+        title.addView(appName,new LinearLayout.LayoutParams(0,dp(29),1));
         toolButton = xpButton("Tool"); toolButton.setTextColor(Color.WHITE); toolButton.setTextSize(11); toolButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
         TextView setupButton = xpButton("Setup"); setupButton.setTextColor(Color.WHITE); setupButton.setTextSize(11); setupButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
         mouseCursorButton = xpButton("🖱 Mouse"); mouseCursorButton.setTextColor(Color.WHITE); mouseCursorButton.setTextSize(11); mouseCursorButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
         copyButton = xpButton("Copy Mini Win"); copyButton.setTextColor(Color.WHITE); copyButton.setTextSize(10); copyButton.setBackground(borderDrawable(0xff236acb,0xffd8e8ff));
-        title.addView(toolButton,new LinearLayout.LayoutParams(dp(52),dp(34)));
-        title.addView(setupButton,new LinearLayout.LayoutParams(dp(58),dp(34)));
-        LinearLayout.LayoutParams mouseTitleParams = new LinearLayout.LayoutParams(dp(74),dp(34)); mouseTitleParams.setMargins(dp(2),0,dp(2),0); title.addView(mouseCursorButton,mouseTitleParams);
-        title.addView(copyButton,new LinearLayout.LayoutParams(dp(72),dp(34)));
+        title.addView(toolButton,new LinearLayout.LayoutParams(dp(48),dp(29)));
+        title.addView(setupButton,new LinearLayout.LayoutParams(dp(52),dp(29)));
+        LinearLayout.LayoutParams mouseTitleParams = new LinearLayout.LayoutParams(dp(66),dp(29)); mouseTitleParams.setMargins(dp(2),0,dp(2),0); title.addView(mouseCursorButton,mouseTitleParams);
+        title.addView(copyButton,new LinearLayout.LayoutParams(dp(65),dp(29)));
         toolButton.setOnClickListener(v -> showToolMenu()); setupButton.setOnClickListener(v -> showSettings()); mouseCursorButton.setOnClickListener(v -> toggleMouseWindow()); copyButton.setOnClickListener(v -> toggleCopyMode());
         TextView mini = xpButton("—"); TextView max = xpButton("□"); TextView close = xpButton("×");
-        title.addView(mini); title.addView(max); title.addView(close);
+        for(TextView winButton:new TextView[]{mini,max,close}) { LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(dp(27),dp(27)); wp.setMargins(dp(1),0,0,0); title.addView(winButton,wp); }
         mini.setOnClickListener(v -> Toast.makeText(this,"برای ادامه، برنامه را به پس‌زمینه ببرید.",Toast.LENGTH_SHORT).show());
         max.setOnClickListener(v -> cycleWindowSize());
         close.setOnClickListener(v -> finish()); root.addView(title);
 
-        navBar = new LinearLayout(this); LinearLayout nav = navBar; nav.setPadding(dp(2),dp(1),dp(2),dp(1)); nav.setGravity(Gravity.CENTER_VERTICAL); nav.setBackgroundColor(0xffece9d8);
+        navBar = new LinearLayout(this); LinearLayout nav = navBar; nav.setPadding(dp(1),0,dp(1),0); nav.setGravity(Gravity.CENTER_VERTICAL); nav.setBackgroundColor(0xffece9d8);
         TextView back = xpButton("◀  عقب"); TextView forward = xpButton("جلو  ▶"); back.setTextSize(15); forward.setTextSize(15);
-        nav.addView(back,new LinearLayout.LayoutParams(dp(92),dp(45))); nav.addView(forward,new LinearLayout.LayoutParams(dp(92),dp(45)));
+        nav.addView(back,new LinearLayout.LayoutParams(dp(76),dp(35))); nav.addView(forward,new LinearLayout.LayoutParams(dp(76),dp(35)));
         back.setOnClickListener(v -> { if(web.canGoBack()) web.goBack(); }); forward.setOnClickListener(v -> { if(web.canGoForward()) web.goForward(); });
         address = new EditText(this); address.setSingleLine(true); address.setTextSize(14); address.setHint("آدرس سایت یا عبارت جست‌وجو"); address.setPadding(dp(8),0,dp(8),0); address.setSelectAllOnFocus(false); address.setInputType(android.text.InputType.TYPE_TEXT_VARIATION_URI);
         address.setBackground(borderDrawable(0xffffffff,0xff7f9db9));
-        nav.addView(address,new LinearLayout.LayoutParams(0,dp(42),1));
-        TextView go = xpButton("برو"); nav.addView(go,new LinearLayout.LayoutParams(dp(48),dp(42)));
+        nav.addView(address,new LinearLayout.LayoutParams(0,dp(34),1));
+        TextView go = xpButton("برو"); nav.addView(go,new LinearLayout.LayoutParams(dp(42),dp(34)));
         go.setOnClickListener(v -> navigateFromAddress()); address.setOnEditorActionListener((v,action,event)->{navigateFromAddress();return true;});
         tabStrip = new LinearLayout(this); tabStrip.setOrientation(LinearLayout.HORIZONTAL); tabStrip.setGravity(Gravity.CENTER_VERTICAL); tabStrip.setPadding(dp(1),0,dp(1),0); tabStrip.setBackgroundColor(0xffd6d2c4);
-        root.addView(tabStrip,new LinearLayout.LayoutParams(-1,dp(30)));
+        root.addView(tabStrip,new LinearLayout.LayoutParams(-1,dp(25)));
         root.addView(nav);
         progress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setProgress(0);
         toolbar = new LinearLayout(this); toolbar.setVisibility(View.GONE);
@@ -147,6 +150,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         });
         handler.postDelayed(hideStatusMessage, 3000);
         web = new WebView(this);
+        registerForContextMenu(web);
         // Use WebView's native pinch-to-zoom handling. Do not intercept touch events here:
         // manual span/JavaScript zoom caused jitter, mixed zoom direction, and touch hangs.
         root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
@@ -249,7 +253,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
             if(e.getActionMasked()==MotionEvent.ACTION_UP){return true;}return true;
         });
         left.setOnClickListener(v -> dispatchPageMouseClick());
-        recenter.setOnClickListener(v -> {pageMouseX=.5f;pageMouseY=.35f;pageMouseReady=true;updatePagePointer();});
+        recenter.setOnClickListener(v -> {screenPointerX=.5f;screenPointerY=.35f;pageMouseX=.5f;pageMouseY=.35f;pageMouseReady=true;updatePagePointer();});
         resize.setOnClickListener(v -> showMouseResizeDialog());
         updatePagePointer();
     }
@@ -258,16 +262,16 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         if(web==null || web.getWidth()<=0 || web.getHeight()<=0)return;
         if(!pageMouseReady){pageMouseX=.5f;pageMouseY=.5f;pageMouseReady=true;}
 
-        // Keep the pointer in the complete visible WebView area.  The page's
-        // CSS viewport can have a different size from Android pixels, so the
-        // movement is accumulated in normalized WebView coordinates and then
-        // converted to the actual CSS viewport by updatePagePointer().
-        pageMouseX=Math.max(0f,Math.min(1f,pageMouseX+dx/(float)Math.max(1,web.getWidth())));
-        pageMouseY=Math.max(0f,Math.min(1f,pageMouseY+dy/(float)Math.max(1,web.getHeight())));
+        // The pointer travels across the entire app screen, including title,
+        // address and tab bars. Click actions remain restricted to web content.
+        int rw=Math.max(1,root.getWidth()), rh=Math.max(1,root.getHeight());
+        screenPointerX=Math.max(0f,Math.min(1f,screenPointerX+dx/(float)rw));
+        screenPointerY=Math.max(0f,Math.min(1f,screenPointerY+dy/(float)rh));
         updatePagePointer();
     }
     private void updatePagePointer(){
-        if(web==null)return;
+        if(web==null || root==null)return;
+        showOrMoveScreenPointer();
         pendingPointerX=pageMouseX; pendingPointerY=pageMouseY;
         long now=SystemClock.uptimeMillis();
         if(pointerUpdateScheduled || now-lastPointerUpdateMs<24) {
@@ -282,6 +286,33 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         String js="(function(){try{var vw=Math.max(1,document.documentElement.clientWidth||innerWidth),vh=Math.max(1,document.documentElement.clientHeight||innerHeight);var x=Math.max(0,Math.min(vw-1,Math.round((vw-1)*"+px+")));var y=Math.max(0,Math.min(vh-1,Math.round((vh-1)*"+py+")));var c=document.getElementById('__fastdesk_browser_cursor');if(!c){c=document.createElement('div');c.id='__fastdesk_browser_cursor';c.style.cssText='position:fixed;z-index:2147483647;width:13px;height:18px;pointer-events:none;background:#ffd400;border:1px solid #8a6f00;clip-path:polygon(0 0,0 100%,28% 73%,48% 100%,62% 92%,43% 66%,78% 66%);filter:drop-shadow(1px 1px 1px #555);';document.documentElement.appendChild(c);}c.style.left=x+'px';c.style.top=y+'px';window.__fastdeskMouseX=x;window.__fastdeskMouseY=y;}catch(e){}})()";
         web.evaluateJavascript(js,null);
     }
+    private void showOrMoveScreenPointer(){
+        try {
+            if(screenPointerWindow==null){
+                screenPointerView=new TextView(this);
+                screenPointerView.setText("➤"); screenPointerView.setTextSize(25);
+                screenPointerView.setTextColor(0xffffd400);
+                screenPointerView.setShadowLayer(2f,1f,1f,Color.BLACK);
+                screenPointerView.setPadding(0,0,0,0);
+                screenPointerWindow=new PopupWindow(screenPointerView,dp(28),dp(32),false);
+                screenPointerWindow.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+                screenPointerWindow.setTouchable(false); screenPointerWindow.setFocusable(false); screenPointerWindow.setOutsideTouchable(false);
+            }
+            int[] loc=new int[2]; root.getLocationOnScreen(loc);
+            int x=loc[0]+Math.round(screenPointerX*Math.max(0,root.getWidth()-dp(28)));
+            int y=loc[1]+Math.round(screenPointerY*Math.max(0,root.getHeight()-dp(32)));
+            if(!screenPointerWindow.isShowing()) screenPointerWindow.showAtLocation(root,Gravity.TOP|Gravity.START,x,y);
+            else screenPointerWindow.update(x,y,-1,-1);
+            int[] wl=new int[2]; web.getLocationOnScreen(wl);
+            float localX=x-wl[0], localY=y-wl[1];
+            if(localX>=0 && localY>=0 && localX<web.getWidth() && localY<web.getHeight()){
+                float wx=localX/(float)Math.max(1,web.getWidth());
+                float wy=localY/(float)Math.max(1,web.getHeight());
+                pageMouseX=wx; pageMouseY=wy;
+            }
+        } catch(Exception ignored) {}
+    }
+
     private void hidePagePointer(){
         if(web==null)return;
         pointerUpdateScheduled=false;
@@ -289,7 +320,15 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
     }
 
     private void dispatchPageMouseClick(){
-        if(web==null)return; updatePagePointer();
+        if(web==null || root==null)return;
+        int[] rootLoc=new int[2], webLoc=new int[2]; root.getLocationOnScreen(rootLoc); web.getLocationOnScreen(webLoc);
+        float sx=rootLoc[0]+screenPointerX*root.getWidth(), sy=rootLoc[1]+screenPointerY*root.getHeight();
+        if(sx<webLoc[0] || sy<webLoc[1] || sx>=webLoc[0]+web.getWidth() || sy>=webLoc[1]+web.getHeight()){
+            Toast.makeText(this,"نشانگر روی نوار مرورگر است؛ برای کلیک آن را روی صفحهٔ وب ببرید.",Toast.LENGTH_SHORT).show(); return;
+        }
+        pageMouseX=(sx-webLoc[0])/(float)Math.max(1,web.getWidth());
+        pageMouseY=(sy-webLoc[1])/(float)Math.max(1,web.getHeight());
+        updatePagePointer();
         String js="(function(){try{var x=window.__fastdeskMouseX||Math.round(innerWidth*.5),y=window.__fastdeskMouseY||Math.round(innerHeight*.35);var e=document.elementFromPoint(x,y);if(!e)return;['mousemove','mousedown','mouseup','click'].forEach(function(t){e.dispatchEvent(new MouseEvent(t,{view:window,bubbles:true,cancelable:true,clientX:x,clientY:y,button:0,buttons:t==='mousedown'?1:0}));});if(e.focus)e.focus();}catch(e){}})()";
         web.evaluateJavascript(js,null);
     }
@@ -348,6 +387,62 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
     private void newTab(){ saveCurrentTab(); tabs.add(new TabState(null,"about:home","خانه")); currentTab=tabs.size()-1; web.stopLoading(); showHome(); rebuildTabs(); address.setText(""); }
     private void closeCurrentTab(){ if(tabs.size()<=1)return; tabs.remove(currentTab); currentTab=Math.max(0,currentTab-1); TabState t=tabs.get(currentTab); if(t.state!=null)web.restoreState(t.state); else loadUrl(t.url); rebuildTabs(); }
 
+
+    @Override public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
+        super.onCreateContextMenu(menu, v, menuInfo);
+        if (v != web || web == null) return;
+        WebView.HitTestResult hit = web.getHitTestResult();
+        if (hit == null) return;
+        final int type = hit.getType();
+        String extra = hit.getExtra();
+        final String pageUrl = web.getUrl();
+        final String title = web.getTitle();
+        String mediaUrl = extra == null ? "" : extra.trim();
+        // On some WebView versions a long-pressed image/media is exposed through
+        // requestFocusNodeHref rather than HitTestResult.getExtra().
+        if (mediaUrl.isEmpty() || type == WebView.HitTestResult.SRC_ANCHOR_TYPE) {
+            Message msg = web.obtainMessage();
+            web.requestFocusNodeHref(msg);
+            if (msg.getData() != null) {
+                Bundle data = msg.getData();
+                String src = data.getString("src");
+                String href = data.getString("url");
+                if (src != null && !src.trim().isEmpty() && (type == WebView.HitTestResult.IMAGE_TYPE || type == WebView.HitTestResult.SRC_IMAGE)) mediaUrl = src;
+                else if (mediaUrl.isEmpty() && href != null) mediaUrl = href;
+            }
+        }
+        final String target = mediaUrl;
+        boolean media = type == WebView.HitTestResult.IMAGE_TYPE
+                || type == WebView.HitTestResult.SRC_IMAGE
+                || type == WebView.HitTestResult.VIDEO_TYPE
+                || type == WebView.HitTestResult.SRC_VIDEO
+                || (target != null && isLikelyDownloadable(target));
+        if (target != null && !target.isEmpty() && (media || type == WebView.HitTestResult.SRC_ANCHOR_TYPE || type == WebView.HitTestResult.ANCHOR_TYPE)) {
+            menu.setHeaderTitle(media ? "رسانه / فایل" : "پیوند");
+            menu.add("⬇ دانلود…").setOnMenuItemClickListener(item -> {
+                promptDownload(target, guessName(target, null));
+                return true;
+            });
+            if (!media && (target.startsWith("http://") || target.startsWith("https://"))) {
+                menu.add("بازکردن پیوند").setOnMenuItemClickListener(item -> { loadUrl(target); return true; });
+            }
+            menu.add("دانلود صفحهٔ فعلی…").setOnMenuItemClickListener(item -> {
+                if (pageUrl != null && (pageUrl.startsWith("http://") || pageUrl.startsWith("https://"))) promptDownload(pageUrl, guessName(pageUrl, null));
+                return true;
+            });
+        } else if (type == WebView.HitTestResult.EDIT_TEXT_TYPE) {
+            menu.setHeaderTitle("متن");
+            menu.add("انتخاب همه").setOnMenuItemClickListener(item -> { web.evaluateJavascript("(function(){var e=document.activeElement;if(e&&e.select)e.select();})()", null); return true; });
+        }
+    }
+
+    private boolean isLikelyDownloadable(String url) {
+        if (url == null) return false;
+        String u = url.toLowerCase(Locale.ROOT);
+        return u.matches(".*\\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|m4v|webm|mov|mkv|mp3|m4a|aac|ogg|opus|wav|flac|pdf|zip|rar|7z|apk|txt|xml|csv|docx?|xlsx?|pptx?)(?:[?#].*)?$")
+                || u.contains(".m3u8") || u.contains(".mpd");
+    }
+
     private void configureWebView() {
         WebSettings s=web.getSettings(); s.setJavaScriptEnabled(prefs.getBoolean("javascript", true)); s.setDomStorageEnabled(true); s.setDatabaseEnabled(true); s.setSupportMultipleWindows(false);
         s.setLoadsImagesAutomatically(!textOnly); s.setBlockNetworkImage(textOnly); s.setMediaPlaybackRequiresUserGesture(false); s.setSupportZoom(true); s.setBuiltInZoomControls(true); s.setDisplayZoomControls(false); s.setAllowFileAccess(false); s.setAllowContentAccess(true); s.setCacheMode(prefs.getBoolean("noCache", false) ? WebSettings.LOAD_NO_CACHE : WebSettings.LOAD_CACHE_ELSE_NETWORK);
@@ -359,8 +454,20 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
             @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); status.setText("بارگذاری تمام شد | "+networkDescription()+(textOnly?" | فقط متن":"")); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) { enforceDesktopViewport(); web.getSettings().setLoadWithOverviewMode(false); }if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error){super.onReceivedError(view,request,error);if(request.isForMainFrame()){progress.setVisibility(View.GONE);if(!isOnline())setOfflineUi();else{appName.setText("🌐  FastDesk Browser");status.setText("خطا در بازکردن سایت: "+error.getDescription()+" | برای تلاش دوباره بارگذاری کنید");}}}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){super.onReceivedHttpError(view,request,response);if(request.isForMainFrame())status.setText("پاسخ سایت: HTTP "+response.getStatusCode()+" | "+networkDescription());}
-            @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){String u=req.getUrl().toString(); if(u.startsWith("http://")||u.startsWith("https://")) return false; try { Intent i=new Intent(Intent.ACTION_VIEW, Uri.parse(u)); startActivity(i); } catch(Exception ignored) { Toast.makeText(MainActivity.this,"برنامه‌ای برای بازکردن این پیوند پیدا نشد",Toast.LENGTH_SHORT).show(); } return true;}
-            @Override public boolean shouldOverrideUrlLoading(WebView view,String url){if(url==null)return false;if(url.startsWith("http://")||url.startsWith("https://"))return false;try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(Exception ignored){}return true;}
+            @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){
+                String u=req.getUrl().toString();
+                if(isGoogleAccountAuthUrl(u)){ openGoogleSignInExternally(u); return true; }
+                if(u.startsWith("http://")||u.startsWith("https://")) return false;
+                openExternalAppLink(u);
+                return true;
+            }
+            @Override public boolean shouldOverrideUrlLoading(WebView view,String url){
+                if(url==null)return false;
+                if(isGoogleAccountAuthUrl(url)){ openGoogleSignInExternally(url); return true; }
+                if(url.startsWith("http://")||url.startsWith("https://"))return false;
+                openExternalAppLink(url);
+                return true;
+            }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
                 // Keep this callback extremely light: it runs for many subresources on a page.
                 // Only inspect likely media URLs and avoid posting duplicate UI work.
@@ -380,6 +487,73 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
             @Override public void onGeolocationPermissionsShowPrompt(String origin,GeolocationPermissions.Callback callback){new AlertDialog.Builder(MainActivity.this).setTitle("دسترسی مکانی سایت").setMessage(origin+" درخواست موقعیت مکانی دارد. فقط در صورت اعتماد اجازه دهید.").setPositiveButton("ادامه",(d,w)->{pendingGeoOrigin=origin;pendingGeoCallback=callback;if(androidx.core.content.ContextCompat.checkSelfPermission(MainActivity.this,android.Manifest.permission.ACCESS_FINE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED||androidx.core.content.ContextCompat.checkSelfPermission(MainActivity.this,android.Manifest.permission.ACCESS_COARSE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED)finishGeoPermission(true);else requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.ACCESS_COARSE_LOCATION},4202);}).setNegativeButton("رد",(d,w)->callback.invoke(origin,false,false)).show();}
         });
         web.setDownloadListener((url,ua,contentDisposition,mimeType,length)->promptDownload(url,guessName(url,contentDisposition)));
+    }
+
+    /** Opens links that intentionally hand work off to another Android app.
+     * SMS links use ACTION_SENDTO so Android opens the messaging composer and never sends silently.
+     */
+    private void openExternalAppLink(String rawUrl){
+        if(rawUrl==null||rawUrl.trim().isEmpty())return;
+        try{
+            Uri uri=Uri.parse(rawUrl);
+            String scheme=uri.getScheme()==null?"":uri.getScheme().toLowerCase(Locale.ROOT);
+            Intent intent;
+            if("intent".equals(scheme)){
+                intent=Intent.parseUri(rawUrl,Intent.URI_INTENT_SCHEME);
+                intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                try{startActivity(intent);return;}catch(Exception noHandler){
+                    String fallback=intent.getStringExtra("browser_fallback_url");
+                    if(fallback!=null&&(fallback.startsWith("https://")||fallback.startsWith("http://"))){loadUrl(fallback);return;}
+                    throw noHandler;
+                }
+            }else if("sms".equals(scheme)||"smsto".equals(scheme)||"mms".equals(scheme)||"mmsto".equals(scheme)){
+                // ACTION_SENDTO launches the user's SMS app with recipient/body prefilled if supplied.
+                Uri smsUri=uri;
+                if("smsto".equals(scheme)||"mmsto".equals(scheme)){
+                    String normalized="sms:"+uri.getSchemeSpecificPart();
+                    smsUri=Uri.parse(normalized);
+                }
+                intent=new Intent(Intent.ACTION_SENDTO,smsUri);
+            }else if("tel".equals(scheme)){
+                intent=new Intent(Intent.ACTION_DIAL,uri);
+            }else{
+                intent=new Intent(Intent.ACTION_VIEW,uri);
+                intent.addCategory(Intent.CATEGORY_BROWSABLE);
+            }
+            startActivity(intent);
+        }catch(Exception e){
+            Toast.makeText(this,"برای این عملیات برنامهٔ سازگار پیدا نشد؛ مطمئن شوید برنامهٔ پیامک یا برنامهٔ مقصد نصب است.",Toast.LENGTH_LONG).show();
+        }
+    }
+
+    // Google blocks sign-in flows inside many embedded WebViews. Use the user's installed
+    // browser for the official Google authentication flow rather than trying to bypass it.
+    private boolean isGoogleAccountAuthUrl(String value){
+        try {
+            Uri u=Uri.parse(value);
+            String host=u.getHost();
+            if(host==null)return false;
+            host=host.toLowerCase(Locale.ROOT);
+            String path=(u.getPath()==null?"":u.getPath()).toLowerCase(Locale.ROOT);
+            return host.equals("accounts.google.com")
+                    || host.equals("accounts.youtube.com")
+                    || (host.equals("myaccount.google.com") && (path.contains("signin") || path.contains("login")))
+                    || (host.equals("google.com") || host.endsWith(".google.com"))
+                       && (path.startsWith("/signin/") || path.startsWith("/servicelogin") || path.startsWith("/o/oauth2/") || path.startsWith("/oauth2/"));
+        } catch(Exception ignored){ return false; }
+    }
+
+    private void openGoogleSignInExternally(String url){
+        try {
+            Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(url));
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+            startActivity(intent);
+            Toast.makeText(this,"ورود گوگل در مرورگر خارجی ادامه می‌یابد؛ پس از تأیید به FastDesk برگردید.",Toast.LENGTH_LONG).show();
+        } catch(Exception e){
+            new AlertDialog.Builder(this).setTitle("ورود به Google Account")
+                .setMessage("برای ورود امن به حساب گوگل، یک مرورگر مانند Chrome، Edge یا Firefox نصب/فعال کنید و دوباره تلاش کنید.")
+                .setPositiveButton("باشه",null).show();
+        }
     }
 
     private void askWebPermission(PermissionRequest request){String[] resources=request.getResources();ArrayList<String> androidPermissions=new ArrayList<>();for(String r:resources){if(PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r))androidPermissions.add(android.Manifest.permission.RECORD_AUDIO);if(PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r))androidPermissions.add(android.Manifest.permission.CAMERA);}if(androidPermissions.isEmpty()){new AlertDialog.Builder(this).setTitle("درخواست دسترسی سایت").setMessage("این سایت درخواست دسترسی به قابلیت دستگاه دارد. اجازه فقط برای همین درخواست داده می‌شود.").setPositiveButton("اجازه",(d,w)->request.grant(resources)).setNegativeButton("رد",(d,w)->request.deny()).show();return;}pendingWebPermissionRequest=request;new AlertDialog.Builder(this).setTitle("دسترسی صدا/دوربین").setMessage("سایت "+web.getUrl()+" درخواست استفاده از میکروفون یا دوربین دارد. فقط اگر تماس یا قابلیت صوتی/تصویری را خودتان شروع کرده‌اید اجازه دهید.").setPositiveButton("ادامه",(d,w)->{ArrayList<String> missing=new ArrayList<>();for(String p:androidPermissions)if(androidx.core.content.ContextCompat.checkSelfPermission(this,p)!=android.content.pm.PackageManager.PERMISSION_GRANTED)missing.add(p);if(missing.isEmpty())grantPendingWebPermission();else requestPermissions(missing.toArray(new String[0]),4201);}).setNegativeButton("رد",(d,w)->{pendingWebPermissionRequest=null;request.deny();}).show();}
@@ -517,7 +691,23 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
     private void showSavedList(String title,String key,boolean bookmarks){ArrayList<String> a=new ArrayList<>(prefs.getStringSet(key,new HashSet<>()));Collections.sort(a,(x,y)->{if(bookmarks)return x.compareToIgnoreCase(y);try{return Long.compare(Long.parseLong(y.substring(0,y.indexOf('\t'))),Long.parseLong(x.substring(0,x.indexOf('\t'))));}catch(Exception e){return y.compareTo(x);}});ArrayList<String> labels=new ArrayList<>(),urls=new ArrayList<>();for(String item:a){String[] p=item.split("\\t",3);if(bookmarks){if(p.length>=2){labels.add(p[0]);urls.add(p[1]);}}else if(p.length>=3){labels.add(p[1]);urls.add(p[2]);}}String[] display=labels.toArray(new String[0]);new AlertDialog.Builder(this).setTitle(title+" ("+display.length+")").setItems(display,(d,w)->loadUrl(urls.get(w))).setNeutralButton("پاک‌کردن",(d,w)->new AlertDialog.Builder(this).setMessage("همه موارد این فهرست پاک شوند؟").setPositiveButton("پاک‌کردن",(x,y)->prefs.edit().remove(key).apply()).setNegativeButton("لغو",null).show()).setNegativeButton("بستن",null).show();}
     private void shareCurrentPage(){String u=web.getUrl();if(u==null)return;Intent i=new Intent(Intent.ACTION_SEND);i.setType("text/plain");i.putExtra(Intent.EXTRA_TEXT,(web.getTitle()==null?"":web.getTitle()+"\n")+u);startActivity(Intent.createChooser(i,"اشتراک صفحه"));}
 
-    private void showSettings(){String[] options={"مصرف کم اینترنت / فقط متن","حالت دسکتاپ (User-Agent)","تم Windows XP / Android","مدیریت موتورهای جست‌وجو","نوار ابزار فشرده","وضعیت شبکه و سازگاری نسل‌ها","مدیریت افزونه‌ها","JavaScript روشن/خاموش","پاک‌کردن حافظه نهان","پاک‌کردن کوکی‌ها و داده سایت","بارگذاری بدون کش","مدیریت دانلود و صفحه"};new AlertDialog.Builder(this).setTitle("تنظیمات و کنترل مرورگر").setItems(options,(d,which)->{switch(which){case 0:textOnly=!textOnly;prefs.edit().putBoolean("textOnly",textOnly).apply();web.getSettings().setLoadsImagesAutomatically(!textOnly);web.getSettings().setBlockNetworkImage(textOnly);status.setText(textOnly?"حالت کم‌مصرف: تصاویر مسدود شدند":"حالت عادی فعال شد");web.reload();break;case 1:desktopMode=!desktopMode;prefs.edit().putBoolean("desktop",desktopMode).apply();applyUserAgent();status.setText(desktopMode?"حالت دسکتاپ فعال شد؛ سایت دوباره بارگذاری می‌شود":"حالت موبایل فعال شد؛ سایت دوباره بارگذاری می‌شود");web.reload();break;case 2:showThemeChoice();break;case 3:showSearchSettings();break;case 4:compactToolbar=!compactToolbar;prefs.edit().putBoolean("compact",compactToolbar).apply();for(int i=0;i<toolbar.getChildCount();i++){View item=toolbar.getChildAt(i);item.setPadding(dp(compactToolbar?4:7),dp(3),dp(compactToolbar?4:7),dp(3));}break;case 5:updateNetworkStatus();new AlertDialog.Builder(this).setMessage("اتصال فعلی: "+networkDescription()+"\nبهینه‌سازی مرورگر با هر اتصال فعال کار می‌کند. نسل شبکه را مودم و اپراتور تعیین می‌کنند؛ 6G فقط با پشتیبانی واقعی دستگاه/شبکه قابل استفاده است.").setPositiveButton("باشه",null).show();break;case 6:showExtensions();break;case 7:boolean js=!prefs.getBoolean("javascript",true);prefs.edit().putBoolean("javascript",js).apply();web.getSettings().setJavaScriptEnabled(js);Toast.makeText(this,js?"JavaScript روشن شد":"JavaScript خاموش شد؛ بعضی سایت‌ها ممکن است کار نکنند",Toast.LENGTH_LONG).show();break;case 8:web.clearCache(true);Toast.makeText(this,"حافظه نهان پاک شد",Toast.LENGTH_SHORT).show();break;case 9:new AlertDialog.Builder(this).setMessage("با پاک‌کردن کوکی‌ها ممکن است از حساب‌های سایت‌ها خارج شوید.").setPositiveButton("پاک‌کردن",(x,y)->{CookieManager.getInstance().removeAllCookies(v->runOnUiThread(()->Toast.makeText(this,"کوکی‌ها پاک شدند",Toast.LENGTH_SHORT).show()));CookieManager.getInstance().flush();}).setNegativeButton("لغو",null).show();break;case 10:boolean noCache=!prefs.getBoolean("noCache",false);prefs.edit().putBoolean("noCache",noCache).apply();web.getSettings().setCacheMode(noCache?WebSettings.LOAD_NO_CACHE:WebSettings.LOAD_CACHE_ELSE_NETWORK);Toast.makeText(this,noCache?"بارگذاری بدون کش فعال شد":"ذخیره موقت صفحه‌ها فعال شد؛ بازگشت و رفتن به جلو تا حد امکان از داده‌های ذخیره‌شده استفاده می‌کند",Toast.LENGTH_LONG).show();break;case 11:showSaveMenu();break;}}).setNegativeButton("بستن",null).show();}
+
+    private void showOtherBrowsers(){
+        final String[] names={"FastDesk Browser (موتور داخلی)","Google Chrome","Microsoft Edge","Mozilla Firefox","Opera","Brave","Samsung Internet","بازکردن با هر مرورگر نصب‌شده…"};
+        final String[] packages={null,"com.android.chrome","com.microsoft.emmx","org.mozilla.firefox","com.opera.browser","com.brave.browser","com.sec.android.app.sbrowser",null};
+        new AlertDialog.Builder(this).setTitle("انتخاب مرورگر").setMessage("FastDesk از موتور Android WebView استفاده می‌کند. مرورگرهای دیگر به‌عنوان برنامهٔ واقعیِ نصب‌شده باز می‌شوند؛ موتور آن‌ها داخل FastDesk ادغام نشده است.").setItems(names,(dialog,which)->{
+            String current=web!=null?web.getUrl():null;
+            if(current==null||current.trim().isEmpty()||current.startsWith("about:"))current="https://www.google.com/";
+            final String targetUrl=current;
+            if(which==0){Toast.makeText(this,"مرورگر داخلی FastDesk فعال است",Toast.LENGTH_SHORT).show();return;}
+            if(which==7){try{Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(targetUrl));startActivity(Intent.createChooser(intent,"بازکردن صفحه با"));}catch(Exception e){Toast.makeText(this,"مرورگر سازگار پیدا نشد",Toast.LENGTH_SHORT).show();}return;}
+            String pkg=packages[which];
+            try{Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(targetUrl));intent.setPackage(pkg);startActivity(intent);}
+            catch(Exception e){new AlertDialog.Builder(this).setTitle("مرورگر نصب نیست").setMessage(names[which]+" روی دستگاه پیدا نشد. می‌توانی آن را نصب کنی یا صفحه را با مرورگر دیگری باز کنی.").setPositiveButton("انتخاب مرورگر دیگر",(d,w)->{try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_VIEW,Uri.parse(targetUrl)),"بازکردن صفحه با"));}catch(Exception ignored){}}).setNegativeButton("بستن",null).show();}
+        }).setNegativeButton("بستن",null).show();
+    }
+
+    private void showSettings(){String[] options={"مصرف کم اینترنت / فقط متن","حالت دسکتاپ (User-Agent)","تم Windows XP / Android","مدیریت موتورهای جست‌وجو","نوار ابزار فشرده","وضعیت شبکه و سازگاری نسل‌ها","مدیریت افزونه‌ها","JavaScript روشن/خاموش","پاک‌کردن حافظه نهان","پاک‌کردن کوکی‌ها و داده سایت","بارگذاری بدون کش","مدیریت دانلود و صفحه","مرورگرهای دیگر (Edge / Chrome / Firefox / Opera / Brave / Samsung Internet)"};new AlertDialog.Builder(this).setTitle("تنظیمات و کنترل مرورگر").setItems(options,(d,which)->{switch(which){case 0:textOnly=!textOnly;prefs.edit().putBoolean("textOnly",textOnly).apply();web.getSettings().setLoadsImagesAutomatically(!textOnly);web.getSettings().setBlockNetworkImage(textOnly);status.setText(textOnly?"حالت کم‌مصرف: تصاویر مسدود شدند":"حالت عادی فعال شد");web.reload();break;case 1:desktopMode=!desktopMode;prefs.edit().putBoolean("desktop",desktopMode).apply();applyUserAgent();status.setText(desktopMode?"حالت دسکتاپ فعال شد؛ سایت دوباره بارگذاری می‌شود":"حالت موبایل فعال شد؛ سایت دوباره بارگذاری می‌شود");web.reload();break;case 2:showThemeChoice();break;case 3:showSearchSettings();break;case 4:compactToolbar=!compactToolbar;prefs.edit().putBoolean("compact",compactToolbar).apply();for(int i=0;i<toolbar.getChildCount();i++){View item=toolbar.getChildAt(i);item.setPadding(dp(compactToolbar?4:7),dp(3),dp(compactToolbar?4:7),dp(3));}break;case 5:updateNetworkStatus();new AlertDialog.Builder(this).setMessage("اتصال فعلی: "+networkDescription()+"\nبهینه‌سازی مرورگر با هر اتصال فعال کار می‌کند. نسل شبکه را مودم و اپراتور تعیین می‌کنند؛ 6G فقط با پشتیبانی واقعی دستگاه/شبکه قابل استفاده است.").setPositiveButton("باشه",null).show();break;case 6:showExtensions();break;case 7:boolean js=!prefs.getBoolean("javascript",true);prefs.edit().putBoolean("javascript",js).apply();web.getSettings().setJavaScriptEnabled(js);Toast.makeText(this,js?"JavaScript روشن شد":"JavaScript خاموش شد؛ بعضی سایت‌ها ممکن است کار نکنند",Toast.LENGTH_LONG).show();break;case 8:web.clearCache(true);Toast.makeText(this,"حافظه نهان پاک شد",Toast.LENGTH_SHORT).show();break;case 9:new AlertDialog.Builder(this).setMessage("با پاک‌کردن کوکی‌ها ممکن است از حساب‌های سایت‌ها خارج شوید.").setPositiveButton("پاک‌کردن",(x,y)->{CookieManager.getInstance().removeAllCookies(v->runOnUiThread(()->Toast.makeText(this,"کوکی‌ها پاک شدند",Toast.LENGTH_SHORT).show()));CookieManager.getInstance().flush();}).setNegativeButton("لغو",null).show();break;case 10:boolean noCache=!prefs.getBoolean("noCache",false);prefs.edit().putBoolean("noCache",noCache).apply();web.getSettings().setCacheMode(noCache?WebSettings.LOAD_NO_CACHE:WebSettings.LOAD_CACHE_ELSE_NETWORK);Toast.makeText(this,noCache?"بارگذاری بدون کش فعال شد":"ذخیره موقت صفحه‌ها فعال شد؛ بازگشت و رفتن به جلو تا حد امکان از داده‌های ذخیره‌شده استفاده می‌کند",Toast.LENGTH_LONG).show();break;case 11:showSaveMenu();break;case 12:showOtherBrowsers();break;}}).setNegativeButton("بستن",null).show();}
     private void showThemeChoice(){new AlertDialog.Builder(this).setTitle("سبک نمایش").setItems(new String[]{"Windows XP","Android ساده"},(d,w)->{androidTheme=(w==1);applyTheme(root);status.setText(androidTheme?"تم Android ساده فعال":"تم Windows XP فعال");}).show();}
     private void applyTheme(View view){
         if(view instanceof TextView && !(view instanceof EditText)){
@@ -545,23 +735,27 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
     private void applyUserAgent(){
         if(web==null)return;
         WebSettings s=web.getSettings();
+        // Keep the real Android System WebView identity. A fabricated Windows/Chrome
+        // UA can disagree with the actual engine and trigger extra security verification.
+        // Desktop mode is provided by viewport/layout settings, not by impersonating a PC.
+        s.setUserAgentString(WebSettings.getDefaultUserAgent(this));
+        s.setUseWideViewPort(true);
+        s.setLoadWithOverviewMode(true);
+        s.setSupportZoom(true);
+        s.setBuiltInZoomControls(true);
+        s.setDisplayZoomControls(false);
         if(desktopMode){
-            // Use a complete desktop Chrome UA rather than trying to rewrite Android's UA.
-            s.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
-            s.setUseWideViewPort(true);
-            s.setLoadWithOverviewMode(true);
             s.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.NORMAL);
-            // Fit the full desktop-width page into the available screen, like a desktop browser overview.
             web.setInitialScale(0);
-            s.setSupportZoom(true);
-            s.setBuiltInZoomControls(true);
-            s.setDisplayZoomControls(false);
         }else{
-            s.setUserAgentString(WebSettings.getDefaultUserAgent(this));
-            s.setUseWideViewPort(true);
-            s.setLoadWithOverviewMode(true);
             s.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
             web.setInitialScale(0);
+        }
+        if(Build.VERSION.SDK_INT>=21){
+            CookieManager cm=CookieManager.getInstance();
+            cm.setAcceptCookie(true);
+            cm.setAcceptThirdPartyCookies(web,true);
+            cm.flush();
         }
     }
     private void enforceDesktopViewport(){
@@ -619,5 +813,5 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
     @Override protected void onPause(){saveCurrentFormState();prefs.edit().putBoolean("textOnly",textOnly).putBoolean("desktop",desktopMode).putBoolean("compact",compactToolbar).apply();saveCurrentTab();super.onPause();if(web!=null)web.onPause();}
     @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();}
     @Override public void onBackPressed(){if(web!=null&&web.canGoBack())web.goBack();else super.onBackPressed();}
-    @Override protected void onDestroy(){try{unregisterReceiver(connectivityReceiver);}catch(Exception ignored){}if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}if(mouseWindow!=null){mouseWindow.dismiss();mouseWindow=null;}if(web!=null){web.removeJavascriptInterface("MiniWinBridge");web.destroy();}super.onDestroy();}
+    @Override protected void onDestroy(){try{unregisterReceiver(connectivityReceiver);}catch(Exception ignored){}if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}if(mouseWindow!=null){mouseWindow.dismiss();mouseWindow=null;}if(screenPointerWindow!=null){screenPointerWindow.dismiss();screenPointerWindow=null;}if(web!=null){web.removeJavascriptInterface("MiniWinBridge");web.destroy();}super.onDestroy();}
 }
