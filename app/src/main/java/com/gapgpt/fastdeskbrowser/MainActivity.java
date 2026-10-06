@@ -65,6 +65,8 @@ public class MainActivity extends Activity {
     private String pendingDownloadUrl = "";
     private String pendingDownloadName = "download";
     private String detectedMediaUrl = "";
+    private String currentAutoProfile = "عمومی";
+    private String currentAutoProfileHost = "";
     private final LinkedHashSet<String> detectedMediaUrls = new LinkedHashSet<>();
     private boolean mediaUiPending = false;
     private ValueCallback<Uri[]> fileCallback;
@@ -83,7 +85,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         prefs = getSharedPreferences("browser", MODE_PRIVATE);
         textOnly = prefs.getBoolean("textOnly", false);
-        desktopMode = prefs.contains("desktop") ? prefs.getBoolean("desktop", false) : false;
+        desktopMode = prefs.contains("desktop") ? prefs.getBoolean("desktop", true) : true;
         compactToolbar = prefs.getBoolean("compact", false);
         searchTemplate = prefs.getString("searchTemplate", searchTemplate);
         buildUi();
@@ -454,7 +456,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         applyUserAgent(); web.addJavascriptInterface(new PageBridge(),"MiniWinBridge");
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){updateAddress(url);setOnlineTitle();progress.setVisibility(fullScreenEnabled?View.GONE:View.VISIBLE);progress.setProgress(5);status.setText("در حال بارگذاری… | "+networkDescription());}
-            @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); status.setText("بارگذاری تمام شد | "+networkDescription()+(textOnly?" | فقط متن":"")); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) { enforceDesktopViewport(); web.getSettings().setLoadWithOverviewMode(false); } else { web.getSettings().setLoadWithOverviewMode(true); web.setInitialScale(0); }if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
+            @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); status.setText("پروفایل خودکار: "+currentAutoProfile+(currentAutoProfileHost.isEmpty()?"":" | "+currentAutoProfileHost)+" | بارگذاری تمام شد"); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) { enforceDesktopViewport(); web.getSettings().setLoadWithOverviewMode(false); }if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error){super.onReceivedError(view,request,error);if(request.isForMainFrame()){progress.setVisibility(View.GONE);if(!isOnline())setOfflineUi();else{appName.setText("🌐  FastDesk Browser");status.setText("خطا در بازکردن سایت: "+error.getDescription()+" | برای تلاش دوباره بارگذاری کنید");}}}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){super.onReceivedHttpError(view,request,response);if(request.isForMainFrame())status.setText("پاسخ سایت: HTTP "+response.getStatusCode()+" | "+networkDescription());}
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){
@@ -683,11 +685,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         web.loadUrl(u);
     }
 
-    /**
-     * Chooses a conservative compatibility profile from the destination host.
-     * This adjusts this WebView's rendering/security settings; it does not create
-     * a separate Android app/browser identity or bypass a site's permission prompts.
-     */
+    /** Selects and applies a compatibility profile before the main-frame navigation. */
     private void applyAutomaticSiteProfile(String value){
         if(web==null||value==null)return;
         Uri uri;
@@ -698,37 +696,51 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         host=host.toLowerCase(Locale.ROOT);
         WebSettings settings=web.getSettings();
 
-        // Sites that commonly need mobile layout and stricter cross-site cookie behavior.
-        boolean accountOrFinance = matchesHost(host,"accounts.google.com","login.live.com","login.microsoftonline.com",
-                "appleid.apple.com","paypal.com","bank","banking");
-        // Document/productivity sites often work better with a wide desktop viewport.
-        boolean desktopWebApp = matchesHost(host,"docs.google.com","office.com","microsoft365.com",
-                "notion.so","figma.com","github.com","gitlab.com");
-        // Video/social pages need JavaScript, DOM storage and media playback support.
-        boolean richMedia = matchesHost(host,"youtube.com","youtu.be","vimeo.com","dailymotion.com",
-                "instagram.com","facebook.com","tiktok.com","x.com","twitter.com");
+        boolean signIn = matchesHost(host,"accounts.google.com","login.live.com","login.microsoftonline.com",
+                "appleid.apple.com","auth0.com","okta.com","identity.microsoft.com","login.yahoo.com");
+        boolean finance = matchesHost(host,"paypal.com","stripe.com","bankofamerica.com","chase.com",
+                "wellsfargo.com","capitalone.com","bank","banking");
+        boolean productivity = matchesHost(host,"docs.google.com","sheets.google.com","slides.google.com",
+                "office.com","microsoft365.com","notion.so","figma.com","github.com","gitlab.com");
+        boolean media = matchesHost(host,"youtube.com","youtu.be","googlevideo.com","vimeo.com",
+                "dailymotion.com","instagram.com","facebook.com","tiktok.com","x.com","twitter.com",
+                "twitch.tv","soundcloud.com","spotify.com");
 
+        // Reapply the actual settings at each top-level navigation, not just when the
+        // browser is first created. Never grant Android device permissions automatically.
         settings.setJavaScriptEnabled(prefs.getBoolean("javascript",true));
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
-        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+        settings.setMediaPlaybackRequiresUserGesture(!media);
         settings.setLoadsImagesAutomatically(!textOnly);
         settings.setBlockNetworkImage(textOnly);
         settings.setUseWideViewPort(true);
-        // Fit pages to the available screen by default; only keep a wide desktop layout when explicitly enabled.
-        settings.setLoadWithOverviewMode(!desktopMode || !desktopWebApp);
-        settings.setLayoutAlgorithm(desktopWebApp||desktopMode
+        settings.setSupportZoom(true);
+        settings.setBuiltInZoomControls(true);
+        settings.setDisplayZoomControls(false);
+
+        // Keep the site responsive by default. Productivity sites may use a normal
+        // layout algorithm, but are not forcibly widened to a fake desktop viewport.
+        settings.setLoadWithOverviewMode(!desktopMode);
+        settings.setLayoutAlgorithm(desktopMode||productivity
                 ? WebSettings.LayoutAlgorithm.NORMAL : WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
         if(Build.VERSION.SDK_INT>=21){
             CookieManager cookies=CookieManager.getInstance();
             cookies.setAcceptCookie(true);
-            // Third-party cookies remain enabled for compatible sign-in and embedded media,
-            // but location/camera/microphone permissions are still individually requested.
-            cookies.setAcceptThirdPartyCookies(web,!accountOrFinance || richMedia);
+            // Sign-in and embedded media often need third-party cookies. Finance sites
+            // keep them disabled as a safer default; the site can still request permissions.
+            cookies.setAcceptThirdPartyCookies(web,!finance && (signIn || media || !finance));
         }
-        String profile = desktopWebApp ? "وب‌اپ دسکتاپ" : accountOrFinance ? "حساب/مالی" : richMedia ? "رسانه/شبکه اجتماعی" : "عمومی";
-        prefs.edit().putString("lastAutoProfile",profile).putString("lastAutoProfileHost",host).apply();
-        if(status!=null)status.setText("پروفایل خودکار: "+profile+" | "+host);
+        currentAutoProfile = finance ? "مالی (کوکی شخص ثالث محدود)"
+                : signIn ? "ورود و حساب کاربری"
+                : media ? "رسانه و شبکه اجتماعی"
+                : productivity ? "وب‌اپ و بهره‌وری"
+                : "عمومی متناسب با صفحه";
+        currentAutoProfileHost=host;
+        prefs.edit().putString("lastAutoProfile",currentAutoProfile)
+                .putString("lastAutoProfileHost",host).apply();
+        if(status!=null)status.setText("انتخاب خودکار پروفایل: "+currentAutoProfile+" | "+host);
     }
 
     private boolean matchesHost(String host,String... patterns){
