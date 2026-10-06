@@ -41,6 +41,9 @@ public class MainActivity extends Activity {
     private boolean fullScreenEnabled = false;
     private TextView toolButton;
     private PopupWindow mouseWindow;
+    private int mouseWindowWidth = 270;
+    private int mouseWindowHeight = 255;
+    private PopupWindow fullScreenExitWindow;
     private TextView mouseCursorButton;
     private float pageMouseX = 0.5f, pageMouseY = 0.35f;
     private boolean pageMouseReady = false;
@@ -110,7 +113,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         title.addView(toolButton,new LinearLayout.LayoutParams(dp(52),dp(34)));
         title.addView(setupButton,new LinearLayout.LayoutParams(dp(58),dp(34)));
         LinearLayout.LayoutParams mouseTitleParams = new LinearLayout.LayoutParams(dp(74),dp(34)); mouseTitleParams.setMargins(dp(2),0,dp(2),0); title.addView(mouseCursorButton,mouseTitleParams);
-        title.addView(copyButton,new LinearLayout.LayoutParams(dp(88),dp(34)));
+        title.addView(copyButton,new LinearLayout.LayoutParams(dp(72),dp(34)));
         homeTop.setOnClickListener(v -> showHome());
         toolButton.setOnClickListener(v -> showToolMenu()); setupButton.setOnClickListener(v -> showSettings()); mouseCursorButton.setOnClickListener(v -> toggleMouseWindow()); copyButton.setOnClickListener(v -> toggleCopyMode());
         TextView mini = xpButton("—"); TextView max = xpButton("□"); TextView close = xpButton("×");
@@ -197,7 +200,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         TextView resize = xpButton("↘ تغییر اندازه"); resize.setTextSize(11); controls.addView(resize,new LinearLayout.LayoutParams(dp(94),dp(42)));
         TextView drag = xpButton("☰ درگ"); drag.setTextSize(11); controls.addView(drag,new LinearLayout.LayoutParams(dp(58),dp(42)));
         panel.addView(controls);
-        mouseWindow = new PopupWindow(panel,dp(270),dp(255),false);
+        mouseWindowWidth=270; mouseWindowHeight=255; mouseWindow = new PopupWindow(panel,dp(mouseWindowWidth),dp(mouseWindowHeight),false);
         mouseWindow.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         mouseWindow.setOutsideTouchable(false); mouseWindow.setTouchable(true); mouseWindow.setClippingEnabled(true);
         final int[] popupPos = {Math.max(0, getResources().getDisplayMetrics().widthPixels-dp(282)), dp(100)};
@@ -217,8 +220,8 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
                     int ny=(int)(dragOrigin[1]+e.getRawY()-dragStart[1]);
                     int sw=getResources().getDisplayMetrics().widthPixels;
                     int sh=getResources().getDisplayMetrics().heightPixels;
-                    nx=Math.max(0,Math.min(nx,sw-dp(270)));
-                    ny=Math.max(0,Math.min(ny,sh-dp(255)));
+                    nx=Math.max(0,Math.min(nx,Math.max(0,sw-dp(mouseWindowWidth))));
+                    ny=Math.max(0,Math.min(ny,Math.max(0,sh-dp(mouseWindowHeight))));
                     popupPos[0]=nx; popupPos[1]=ny;
                     if(mouseWindow!=null && mouseWindow.isShowing()) mouseWindow.update(nx,ny,-1,-1);
                     return true;
@@ -285,7 +288,26 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         SeekBar width=new SeekBar(this);width.setMax(250);width.setProgress(100);box.addView(width);
         TextView label2=new TextView(this);label2.setText("ارتفاع پنجره موس");box.addView(label2);
         SeekBar height=new SeekBar(this);height.setMax(300);height.setProgress(100);box.addView(height);
-        new AlertDialog.Builder(this).setTitle("تغییر اندازه پنجره شناور").setView(box).setPositiveButton("اعمال",(d,w)->{if(mouseWindow!=null&&mouseWindow.isShowing())mouseWindow.update(dp(170+width.getProgress()),dp(180+height.getProgress()));}).setNegativeButton("لغو",null).show();
+        new AlertDialog.Builder(this).setTitle("تغییر اندازه پنجره شناور").setView(box).setPositiveButton("اعمال",(d,w)->{
+            int nw=Math.max(dp(238),dp(170+width.getProgress()));
+            int nh=Math.max(dp(150),dp(180+height.getProgress()));
+            mouseWindowWidth=(int)Math.ceil(nw/getResources().getDisplayMetrics().density);
+            mouseWindowHeight=(int)Math.ceil(nh/getResources().getDisplayMetrics().density);
+            if(mouseWindow!=null&&mouseWindow.isShowing()){
+                int sw=getResources().getDisplayMetrics().widthPixels;
+                int sh=getResources().getDisplayMetrics().heightPixels;
+                popupPosClampAndUpdate(sw,sh);
+            }
+        }).setNegativeButton("لغو",null).show();
+    }
+
+    private void popupPosClampAndUpdate(int sw,int sh){
+        if(mouseWindow==null||!mouseWindow.isShowing())return;
+        int[] loc=new int[2];
+        // PopupWindow has no public position getter; keep its last requested position in the
+        // drag listener. This helper is only used to resize without losing the current position.
+        // update(-1,-1) preserves the current position while changing size.
+        mouseWindow.update(-1,-1,dp(mouseWindowWidth),dp(mouseWindowHeight));
     }
 
     private void cycleWindowSize() {
@@ -309,7 +331,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
     private String tabTitle(TabState t,int i){String x=t.title; if(x==null||x.trim().isEmpty())x=t.url; if(x==null||x.trim().isEmpty())x="تب "+(i+1); return x.length()>18?x.substring(0,17)+"…":x;}
     private void saveCurrentTab(){ if(web==null||tabs.isEmpty())return; Bundle b=new Bundle(); try{web.saveState(b);}catch(Exception ignored){} TabState t=tabs.get(currentTab); t.state=b; t.url=web.getUrl(); t.title=web.getTitle(); }
     private void switchTab(int idx){ if(idx<0||idx>=tabs.size()||idx==currentTab)return; saveCurrentTab(); currentTab=idx; TabState t=tabs.get(idx); web.stopLoading(); web.clearHistory(); if(t.state!=null){ try{web.restoreState(t.state);}catch(Exception e){loadUrl(t.url);} } else loadUrl(t.url==null?"https://www.google.com":t.url); rebuildTabs(); updateAddress(web.getUrl()); }
-    private void newTab(){ saveCurrentTab(); tabs.add(new TabState(null,"https://www.google.com","تب جدید")); currentTab=tabs.size()-1; web.stopLoading(); web.loadUrl("https://www.google.com"); rebuildTabs(); address.setText(""); }
+    private void newTab(){ saveCurrentTab(); tabs.add(new TabState(null,"about:home","خانه")); currentTab=tabs.size()-1; web.stopLoading(); showHome(); rebuildTabs(); address.setText(""); }
     private void closeCurrentTab(){ if(tabs.size()<=1)return; tabs.remove(currentTab); currentTab=Math.max(0,currentTab-1); TabState t=tabs.get(currentTab); if(t.state!=null)web.restoreState(t.state); else loadUrl(t.url); rebuildTabs(); }
 
     private void configureWebView() {
@@ -362,7 +384,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         new AlertDialog.Builder(this).setTitle("Tool").setItems(actions,(dialog,which)->{
             switch(which){
                 case 0: toggleToolbarButtons(); break;
-                case 1: showHome(); break;
+                case 1: newTab(); break;
                 case 2: toggleFullScreen(); break;
                 case 3: showTools(); break;
                 case 4: showExtensionSources(); break;
@@ -396,7 +418,31 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
             }
         }
+        if(fullScreenEnabled) showFullScreenExitButton();
+        else hideFullScreenExitButton();
         Toast.makeText(this,fullScreenEnabled?"حالت تمام‌صفحه فعال شد":"حالت تمام‌صفحه غیرفعال شد",Toast.LENGTH_SHORT).show();
+    }
+
+    private void showFullScreenExitButton(){
+        if(fullScreenExitWindow!=null && fullScreenExitWindow.isShowing())return;
+        TextView b=xpButton("⤢ خروج");
+        b.setTextSize(11);
+        b.setTextColor(Color.WHITE);
+        b.setBackground(borderDrawable(0xcc236acb,0xffd8e8ff));
+        b.setOnClickListener(v->toggleFullScreen());
+        fullScreenExitWindow=new PopupWindow(b,dp(72),dp(38),false);
+        fullScreenExitWindow.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        fullScreenExitWindow.setClippingEnabled(true);
+        fullScreenExitWindow.setTouchable(true);
+        fullScreenExitWindow.setOutsideTouchable(false);
+        fullScreenExitWindow.showAtLocation(root,Gravity.TOP|Gravity.END,dp(8),dp(8));
+    }
+
+    private void hideFullScreenExitButton(){
+        if(fullScreenExitWindow!=null){
+            fullScreenExitWindow.dismiss();
+            fullScreenExitWindow=null;
+        }
     }
 
     private void showTools(){
