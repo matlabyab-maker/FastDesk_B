@@ -108,7 +108,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(30),dp(30)));
         title.addView(toolButton,new LinearLayout.LayoutParams(dp(52),dp(34)));
         title.addView(setupButton,new LinearLayout.LayoutParams(dp(58),dp(34)));
         LinearLayout.LayoutParams mouseTitleParams = new LinearLayout.LayoutParams(dp(74),dp(34)); mouseTitleParams.setMargins(dp(2),0,dp(2),0); title.addView(mouseCursorButton,mouseTitleParams);
-        title.addView(copyButton,new LinearLayout.LayoutParams(dp(98),dp(34)));
+        title.addView(copyButton,new LinearLayout.LayoutParams(dp(88),dp(34)));
         toolButton.setOnClickListener(v -> showToolMenu()); setupButton.setOnClickListener(v -> showSettings()); mouseCursorButton.setOnClickListener(v -> toggleMouseWindow()); copyButton.setOnClickListener(v -> toggleCopyMode());
         TextView mini = xpButton("—"); TextView max = xpButton("□"); TextView close = xpButton("×");
         title.addView(mini); title.addView(max); title.addView(close);
