@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         prefs = getSharedPreferences("browser", MODE_PRIVATE);
         textOnly = prefs.getBoolean("textOnly", false);
-        desktopMode = prefs.contains("desktop") ? prefs.getBoolean("desktop", true) : true;
+        desktopMode = prefs.contains("desktop") ? prefs.getBoolean("desktop", false) : false;
         compactToolbar = prefs.getBoolean("compact", false);
         searchTemplate = prefs.getString("searchTemplate", searchTemplate);
         buildUi();
@@ -454,11 +454,12 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         applyUserAgent(); web.addJavascriptInterface(new PageBridge(),"MiniWinBridge");
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){updateAddress(url);setOnlineTitle();progress.setVisibility(fullScreenEnabled?View.GONE:View.VISIBLE);progress.setProgress(5);status.setText("در حال بارگذاری… | "+networkDescription());}
-            @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); status.setText("بارگذاری تمام شد | "+networkDescription()+(textOnly?" | فقط متن":"")); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) { enforceDesktopViewport(); web.getSettings().setLoadWithOverviewMode(false); }if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
+            @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); status.setText("بارگذاری تمام شد | "+networkDescription()+(textOnly?" | فقط متن":"")); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) { enforceDesktopViewport(); web.getSettings().setLoadWithOverviewMode(false); } else { web.getSettings().setLoadWithOverviewMode(true); web.setInitialScale(0); }if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error){super.onReceivedError(view,request,error);if(request.isForMainFrame()){progress.setVisibility(View.GONE);if(!isOnline())setOfflineUi();else{appName.setText("🌐  FastDesk Browser");status.setText("خطا در بازکردن سایت: "+error.getDescription()+" | برای تلاش دوباره بارگذاری کنید");}}}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){super.onReceivedHttpError(view,request,response);if(request.isForMainFrame())status.setText("پاسخ سایت: HTTP "+response.getStatusCode()+" | "+networkDescription());}
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){
                 String u=req.getUrl().toString();
+                if(req.isForMainFrame()) applyAutomaticSiteProfile(u);
                 if(isGoogleAccountAuthUrl(u)){ openGoogleSignInExternally(u); return true; }
                 if(u.startsWith("http://")||u.startsWith("https://")) return false;
                 openExternalAppLink(u);
@@ -466,6 +467,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,String url){
                 if(url==null)return false;
+                applyAutomaticSiteProfile(url);
                 if(isGoogleAccountAuthUrl(url)){ openGoogleSignInExternally(url); return true; }
                 if(url.startsWith("http://")||url.startsWith("https://"))return false;
                 openExternalAppLink(url);
@@ -675,7 +677,68 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
     private int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+0.5f);}
 
     private void navigateFromAddress(){String raw=address.getText().toString().trim();if(raw.isEmpty())return;((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(),0);if(raw.matches("(?i)^[a-z][a-z0-9+.-]*://.*")||raw.startsWith("file:"))loadUrl(raw);else if(raw.matches("(?i)^(localhost|\\d{1,3}(\\.\\d{1,3}){3})(:\\d+)?(/.*)?$")||(raw.contains(".")&&!raw.contains(" ")))loadUrl("https://"+raw);else loadUrl(String.format(Locale.US,searchTemplate,Uri.encode(raw)));}
-    private void loadUrl(String u){if(u==null||u.trim().isEmpty())return;web.loadUrl(u);}
+    private void loadUrl(String u){
+        if(u==null||u.trim().isEmpty())return;
+        applyAutomaticSiteProfile(u);
+        web.loadUrl(u);
+    }
+
+    /**
+     * Chooses a conservative compatibility profile from the destination host.
+     * This adjusts this WebView's rendering/security settings; it does not create
+     * a separate Android app/browser identity or bypass a site's permission prompts.
+     */
+    private void applyAutomaticSiteProfile(String value){
+        if(web==null||value==null)return;
+        Uri uri;
+        try{uri=Uri.parse(value);}catch(Exception e){return;}
+        String scheme=uri.getScheme();
+        String host=uri.getHost();
+        if(host==null||!("http".equalsIgnoreCase(scheme)||"https".equalsIgnoreCase(scheme)))return;
+        host=host.toLowerCase(Locale.ROOT);
+        WebSettings settings=web.getSettings();
+
+        // Sites that commonly need mobile layout and stricter cross-site cookie behavior.
+        boolean accountOrFinance = matchesHost(host,"accounts.google.com","login.live.com","login.microsoftonline.com",
+                "appleid.apple.com","paypal.com","bank","banking");
+        // Document/productivity sites often work better with a wide desktop viewport.
+        boolean desktopWebApp = matchesHost(host,"docs.google.com","office.com","microsoft365.com",
+                "notion.so","figma.com","github.com","gitlab.com");
+        // Video/social pages need JavaScript, DOM storage and media playback support.
+        boolean richMedia = matchesHost(host,"youtube.com","youtu.be","vimeo.com","dailymotion.com",
+                "instagram.com","facebook.com","tiktok.com","x.com","twitter.com");
+
+        settings.setJavaScriptEnabled(prefs.getBoolean("javascript",true));
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setLoadsImagesAutomatically(!textOnly);
+        settings.setBlockNetworkImage(textOnly);
+        settings.setUseWideViewPort(true);
+        // Fit pages to the available screen by default; only keep a wide desktop layout when explicitly enabled.
+        settings.setLoadWithOverviewMode(!desktopMode || !desktopWebApp);
+        settings.setLayoutAlgorithm(desktopWebApp||desktopMode
+                ? WebSettings.LayoutAlgorithm.NORMAL : WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
+        if(Build.VERSION.SDK_INT>=21){
+            CookieManager cookies=CookieManager.getInstance();
+            cookies.setAcceptCookie(true);
+            // Third-party cookies remain enabled for compatible sign-in and embedded media,
+            // but location/camera/microphone permissions are still individually requested.
+            cookies.setAcceptThirdPartyCookies(web,!accountOrFinance || richMedia);
+        }
+        String profile = desktopWebApp ? "وب‌اپ دسکتاپ" : accountOrFinance ? "حساب/مالی" : richMedia ? "رسانه/شبکه اجتماعی" : "عمومی";
+        prefs.edit().putString("lastAutoProfile",profile).putString("lastAutoProfileHost",host).apply();
+        if(status!=null)status.setText("پروفایل خودکار: "+profile+" | "+host);
+    }
+
+    private boolean matchesHost(String host,String... patterns){
+        for(String pattern:patterns){
+            if("bank".equals(pattern)||"banking".equals(pattern)){
+                if(host.contains(pattern))return true;
+            }else if(host.equals(pattern)||host.endsWith("."+pattern))return true;
+        }
+        return false;
+    }
     private void updateAddress(String u){if(u!=null&&!u.equals("about:blank"))address.setText(u);}
     private void showHome(){web.loadDataWithBaseURL("https://home.invalid/",homeHtml(),"text/html","UTF-8",null);address.setText("");}
     private String homeHtml(){ String[] links={"Radio Garden|https://radio.garden/|📻","TuneIn|https://tunein.com/radio/Stream-All-Regions-c425242/|📻","SomaFM|https://somafm.com/|🎵","myTuner Radio|https://mytuner-radio.com/|📻","Radio Paradise|https://radioparadise.com/|🎵","BBC Sounds|https://www.bbc.co.uk/sounds|🇬🇧","Al Jazeera Live|https://www.aljazeera.com/video/live/|📺","DW Live|https://www.dw.com/en/live-tv/s-100825|🇩🇪","France 24|https://www.france24.com/en/live|🇫🇷","Euronews|https://www.euronews.com/live|📺","NHK World|https://www3.nhk.or.jp/nhkworld/en/live/|🇯🇵","CNA|https://www.channelnewsasia.com/watch|🇸🇬","Plex Live TV|https://watch.plex.tv/live-tv|📺","Watream|https://watream.com/|🌍","FaraNews Live|https://faranews.auratech.af/live|🌍","OSINT.tv|https://osint.tv/|🌍"}; StringBuilder cards=new StringBuilder(); for(String x:links){String[] p=x.split("\\|",-1); String domain=Uri.parse(p[1]).getHost(); String icon="https://www.google.com/s2/favicons?domain="+domain+"&sz=64"; cards.append("<a class='card' href='").append(p[1]).append("'><img src='").append(icon).append("' onerror=\"this.style.display='none'\"><span>").append(p[2]).append(" ").append(p[0]).append("</span></a>");} return "<html><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{font-family:Arial;background:#dbe9fa;color:#143b70;padding:14px;text-align:center}.head{background:linear-gradient(#3989f8,#0751b7);color:white;padding:14px;border-radius:7px}.grid{display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:7px;max-width:720px;margin:14px auto}.card{display:flex;align-items:center;gap:8px;text-decoration:none;color:#143b70;background:#f8f7ef;border:1px solid #7b9ebd;border-radius:4px;padding:8px;text-align:left}.card img{width:28px;height:28px}.section{margin-top:18px}</style><div class='head'><h1>FastDesk Browser</h1><p>صفحه خانه</p></div><h2 class='section'>رادیو و تلویزیون زندهٔ جهان</h2><div class='grid'>"+cards.toString()+"</div><h2>سایت‌های آماده</h2><div class='grid'><a class='card' href='https://archive.org'>📚 Archive.org</a><a class='card' href='https://www.nhk.or.jp'>🇯🇵 NHK</a><a class='card' href='https://github.com'>🐙 GitHub</a><a class='card' href='https://chatgpt.com'>🤖 ChatGPT</a><a class='card' href='https://web.telegram.org'>✈️ Telegram</a><a class='card' href='https://web.whatsapp.com'>💬 WhatsApp</a><a class='card' href='https://discord.com/app'>🎮 Discord</a><a class='card' href='https://eitaa.com'>📱 ایتا</a></div><h2>منابع افزونه‌ها</h2><div class='grid'><a class='card' href='https://chromewebstore.google.com/'>🧩 Chrome Web Store</a><a class='card' href='https://addons.mozilla.org/'>🦊 Firefox Add-ons</a><a class='card' href='https://microsoftedge.microsoft.com/addons/Microsoft-Edge-Extensions-Home'>🌐 Edge Add-ons</a><a class='card' href='https://greasyfork.org/'>🧩 Greasy Fork</a></div></html>"; }
