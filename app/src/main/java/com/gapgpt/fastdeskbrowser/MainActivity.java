@@ -124,7 +124,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         toolButton.setOnClickListener(v -> showToolMenu()); downloadButton.setOnClickListener(v -> downloadDetectedOrPrompt()); setupButton.setOnClickListener(v -> showSettings()); mouseCursorButton.setOnClickListener(v -> toggleMouseWindow()); copyButton.setOnClickListener(v -> toggleCopyMode());
         TextView mini = xpButton("—"); TextView max = xpButton("□"); TextView close = xpButton("×");
         for(TextView winButton:new TextView[]{mini,max,close}) { LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(dp(27),dp(27)); wp.setMargins(dp(1),0,0,0); title.addView(winButton,wp); }
-        mini.setOnClickListener(v -> Toast.makeText(this,"برای ادامه، برنامه را به پس‌زمینه ببرید.",Toast.LENGTH_SHORT).show());
+        mini.setOnClickListener(v -> silentMessage());
         max.setOnClickListener(v -> cycleWindowSize());
         close.setOnClickListener(v -> finish()); root.addView(title);
 
@@ -156,6 +156,9 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
     }
 
 
+
+    // Intentionally suppress transient in-browser toast messages as requested.
+    private void silentMessage() {}
 
     private void toggleDesktopFromXpButton(ImageView xpIcon) {
         desktopMode = !desktopMode;
@@ -321,7 +324,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         int[] rootLoc=new int[2], webLoc=new int[2]; root.getLocationOnScreen(rootLoc); web.getLocationOnScreen(webLoc);
         float sx=rootLoc[0]+screenPointerX*root.getWidth(), sy=rootLoc[1]+screenPointerY*root.getHeight();
         if(sx<webLoc[0] || sy<webLoc[1] || sx>=webLoc[0]+web.getWidth() || sy>=webLoc[1]+web.getHeight()){
-            Toast.makeText(this,"نشانگر روی نوار مرورگر است؛ برای کلیک آن را روی صفحهٔ وب ببرید.",Toast.LENGTH_SHORT).show(); return;
+            silentMessage(); return;
         }
         pageMouseX=(sx-webLoc[0])/(float)Math.max(1,web.getWidth());
         pageMouseY=(sy-webLoc[1])/(float)Math.max(1,web.getHeight());
@@ -373,7 +376,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             web.getSettings().setUseWideViewPort(true);
             web.getSettings().setLoadWithOverviewMode(browserViewScale < 100);
         }
-        Toast.makeText(this, "اندازه نمایش مرورگر: " + browserViewScale + "%", Toast.LENGTH_SHORT).show();
+        silentMessage();
     }
 
     private void createInitialTab(){ if(tabs.isEmpty()){ tabs.add(new TabState(null,prefs.getString("lastUrl","https://www.google.com"),"Google")); } rebuildTabs(); loadUrl(tabs.get(0).url); }
@@ -448,7 +451,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         applyUserAgent(); web.addJavascriptInterface(new PageBridge(),"MiniWinBridge");
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){applyAutomaticSiteProfile(url);updateAddress(url);setOnlineTitle();progress.setVisibility(fullScreenEnabled?View.GONE:View.VISIBLE);progress.setProgress(5);}
-            @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); status.setText("آماده"); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) { enforceDesktopViewport(); web.getSettings().setLoadWithOverviewMode(false); }if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
+            @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); if(status!=null)status.setVisibility(View.GONE); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) { enforceDesktopViewport(); web.getSettings().setLoadWithOverviewMode(false); }if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error){super.onReceivedError(view,request,error);if(request.isForMainFrame()){progress.setVisibility(View.GONE);if(!isOnline())setOfflineUi();else{appName.setText("🌐  FastDesk Browser");status.setText("خطا در بازکردن سایت: "+error.getDescription()+" | برای تلاش دوباره بارگذاری کنید");}}}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){super.onReceivedHttpError(view,request,response);if(request.isForMainFrame())status.setText("پاسخ سایت: HTTP "+response.getStatusCode()+" | "+networkDescription());}
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){
@@ -461,7 +464,6 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,String url){
                 if(url==null)return false;
-                applyAutomaticSiteProfile(url);
                 if(isGoogleAccountAuthUrl(url)){ openGoogleSignInExternally(url); return true; }
                 if(url.startsWith("http://")||url.startsWith("https://"))return false;
                 openExternalAppLink(url);
@@ -480,7 +482,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
 });
         web.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView v,int p){progress.setProgress(p);}
-            @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){if(fileCallback!=null)fileCallback.onReceiveValue(null);fileCallback=callback;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);try{startActivityForResult(i,REQ_UPLOAD);}catch(Exception e){fileCallback=null;Toast.makeText(MainActivity.this,"انتخابگر فایل در دسترس نیست",Toast.LENGTH_SHORT).show();return false;}return true;}
+            @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){if(fileCallback!=null)fileCallback.onReceiveValue(null);fileCallback=callback;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);try{startActivityForResult(i,REQ_UPLOAD);}catch(Exception e){fileCallback=null;silentMessage();return false;}return true;}
             @Override public void onPermissionRequest(PermissionRequest request){runOnUiThread(()->askWebPermission(request));}
             @Override public void onGeolocationPermissionsShowPrompt(String origin,GeolocationPermissions.Callback callback){new AlertDialog.Builder(MainActivity.this).setTitle("دسترسی مکانی سایت").setMessage(origin+" درخواست موقعیت مکانی دارد. فقط در صورت اعتماد اجازه دهید.").setPositiveButton("ادامه",(d,w)->{pendingGeoOrigin=origin;pendingGeoCallback=callback;if(androidx.core.content.ContextCompat.checkSelfPermission(MainActivity.this,android.Manifest.permission.ACCESS_FINE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED||androidx.core.content.ContextCompat.checkSelfPermission(MainActivity.this,android.Manifest.permission.ACCESS_COARSE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED)finishGeoPermission(true);else requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.ACCESS_COARSE_LOCATION},4202);}).setNegativeButton("رد",(d,w)->callback.invoke(origin,false,false)).show();}
         });
@@ -520,7 +522,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             }
             startActivity(intent);
         }catch(Exception e){
-            Toast.makeText(this,"برای این عملیات برنامهٔ سازگار پیدا نشد؛ مطمئن شوید برنامهٔ پیامک یا برنامهٔ مقصد نصب است.",Toast.LENGTH_LONG).show();
+            silentMessage();
         }
     }
 
@@ -570,7 +572,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
 
     private void saveBrowserSettings(){
         boolean ok=prefs.edit().putBoolean("textOnly",textOnly).putBoolean("desktop",desktopMode).putBoolean("compact",compactToolbar).commit();
-        Toast.makeText(this,ok?"تنظیمات مرورگر ذخیره شد":"ذخیره تنظیمات ناموفق بود",Toast.LENGTH_SHORT).show();
+        silentMessage();
     }
 
     private void showToolMenu(){
@@ -593,7 +595,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             if(child!=toolButton) child.setVisibility(toolbarButtonsVisible?View.VISIBLE:View.GONE);
         }
         toolButton.setText(toolbarButtonsVisible?"Tool ▾":"Tool ▸");
-        Toast.makeText(this,toolbarButtonsVisible?"دکمه‌های نوار بالا آشکار شدند":"دکمه‌های نوار بالا پنهان شدند",Toast.LENGTH_SHORT).show();
+        silentMessage();
     }
 
     private void toggleFullScreen(){
@@ -614,7 +616,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         }
         if(fullScreenEnabled) showFullScreenExitButton();
         else hideFullScreenExitButton();
-        Toast.makeText(this,fullScreenEnabled?"حالت تمام‌صفحه فعال شد":"حالت تمام‌صفحه غیرفعال شد",Toast.LENGTH_SHORT).show();
+        silentMessage();
     }
 
     private void showFullScreenExitButton(){
@@ -677,66 +679,50 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         web.loadUrl(u);
     }
 
-    /** Selects and applies a compatibility profile before the main-frame navigation. */
+    /** Applies practical WebView compatibility settings for the destination host. */
     private void applyAutomaticSiteProfile(String value){
         if(web==null||value==null)return;
         Uri uri;
         try{uri=Uri.parse(value);}catch(Exception e){return;}
-        String scheme=uri.getScheme();
-        String host=uri.getHost();
+        String scheme=uri.getScheme(), host=uri.getHost();
         if(host==null||!("http".equalsIgnoreCase(scheme)||"https".equalsIgnoreCase(scheme)))return;
         host=host.toLowerCase(Locale.ROOT);
-        WebSettings settings=web.getSettings();
+        WebSettings s=web.getSettings();
 
-        boolean signIn = matchesHost(host,"accounts.google.com","login.live.com","login.microsoftonline.com",
-                "appleid.apple.com","auth0.com","okta.com","identity.microsoft.com","login.yahoo.com",
-                "login.microsoft.com","signin.aws.amazon.com","id.atlassian.com","login.gov");
-        boolean finance = matchesHost(host,"paypal.com","stripe.com","bankofamerica.com","chase.com",
-                "wellsfargo.com","capitalone.com","bank","banking","wise.com","revolut.com",
-                "cash.app","venmo.com");
-        boolean productivity = matchesHost(host,"docs.google.com","sheets.google.com","slides.google.com",
-                "drive.google.com","office.com","microsoft365.com","live.com","notion.so","figma.com",
-                "github.com","gitlab.com","atlassian.net","slack.com","trello.com","dropbox.com",
-                "onedrive.live.com","canva.com","linear.app");
-        boolean media = matchesHost(host,"youtube.com","youtu.be","googlevideo.com","vimeo.com",
-                "dailymotion.com","instagram.com","facebook.com","tiktok.com","x.com","twitter.com",
-                "twitch.tv","soundcloud.com","spotify.com","netflix.com","disneyplus.com","primevideo.com",
-                "reddit.com","pinterest.com");
+        boolean auth=matchesHost(host,"accounts.google.com","login.google.com","login.live.com","login.microsoftonline.com","login.microsoft.com","appleid.apple.com","login.yahoo.com","auth0.com","okta.com","identity.microsoft.com","id.atlassian.com","signin.aws.amazon.com","login.gov","accounts.snapchat.com");
+        boolean finance=matchesHost(host,"paypal.com","stripe.com","wise.com","revolut.com","cash.app","venmo.com","bankofamerica.com","chase.com","wellsfargo.com","capitalone.com") || host.contains("bank") || host.contains("banking");
+        boolean work=matchesHost(host,"docs.google.com","sheets.google.com","slides.google.com","drive.google.com","office.com","microsoft365.com","live.com","notion.so","figma.com","github.com","gitlab.com","atlassian.net","slack.com","trello.com","dropbox.com","onedrive.live.com","canva.com","linear.app","zoom.us","meet.google.com","teams.microsoft.com");
+        boolean media=matchesHost(host,"youtube.com","youtu.be","googlevideo.com","vimeo.com","dailymotion.com","twitch.tv","soundcloud.com","spotify.com","netflix.com","disneyplus.com","primevideo.com");
+        boolean social=matchesHost(host,"instagram.com","facebook.com","tiktok.com","x.com","twitter.com","reddit.com","pinterest.com","telegram.org","web.telegram.org","whatsapp.com","web.whatsapp.com");
 
-        // Reapply the actual settings at each top-level navigation, not just when the
-        // browser is first created. Never grant Android device permissions automatically.
-        settings.setJavaScriptEnabled(prefs.getBoolean("javascript",true));
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setJavaScriptCanOpenWindowsAutomatically(true);
-        settings.setMediaPlaybackRequiresUserGesture(!media);
-        settings.setLoadsImagesAutomatically(!textOnly);
-        settings.setBlockNetworkImage(textOnly);
-        settings.setUseWideViewPort(true);
-        settings.setSupportZoom(true);
-        settings.setBuiltInZoomControls(true);
-        settings.setDisplayZoomControls(false);
-
-        // Keep the site responsive by default. Productivity sites may use a normal
-        // layout algorithm, but are not forcibly widened to a fake desktop viewport.
-        settings.setLoadWithOverviewMode(!desktopMode);
-        settings.setLayoutAlgorithm(desktopMode||productivity
-                ? WebSettings.LayoutAlgorithm.NORMAL : WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
+        // Baseline: standards-compliant browser behavior; preserve user-selected JS and data-saving mode.
+        s.setJavaScriptEnabled(prefs.getBoolean("javascript",true));
+        s.setDomStorageEnabled(true);
+        s.setDatabaseEnabled(true);
+        s.setJavaScriptCanOpenWindowsAutomatically(true);
+        s.setSupportMultipleWindows(false);
+        s.setLoadsImagesAutomatically(!textOnly);
+        s.setBlockNetworkImage(textOnly);
+        s.setUseWideViewPort(true);
+        s.setSupportZoom(true);
+        s.setBuiltInZoomControls(true);
+        s.setDisplayZoomControls(false);
+        s.setLoadWithOverviewMode(!desktopMode);
+        s.setLayoutAlgorithm((desktopMode||work)?WebSettings.LayoutAlgorithm.NORMAL:WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
+        s.setMediaPlaybackRequiresUserGesture(!(media||social));
+        s.setCacheMode(prefs.getBoolean("noCache",false)?WebSettings.LOAD_NO_CACHE:WebSettings.LOAD_DEFAULT);
         if(Build.VERSION.SDK_INT>=21){
-            CookieManager cookies=CookieManager.getInstance();
-            cookies.setAcceptCookie(true);
-            // Sign-in and embedded media often need third-party cookies. Finance sites
-            // keep them disabled as a safer default; the site can still request permissions.
-            cookies.setAcceptThirdPartyCookies(web,!finance);
+            s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+            CookieManager cm=CookieManager.getInstance();
+            cm.setAcceptCookie(true);
+            // Auth, work apps, and media often rely on embedded identity/session cookies.
+            // Finance keeps third-party cookies off by default; no Android permission is granted here.
+            cm.setAcceptThirdPartyCookies(web,!finance && (auth||work||media||social||!finance));
         }
-        currentAutoProfile = finance ? "مالی (کوکی شخص ثالث محدود)"
-                : signIn ? "ورود و حساب کاربری"
-                : media ? "رسانه و شبکه اجتماعی"
-                : productivity ? "وب‌اپ و بهره‌وری"
-                : "عمومی متناسب با صفحه";
+        currentAutoProfile=finance?"مالی":auth?"ورود و حساب":work?"کاری و وب‌اپ":media?"رسانه":social?"شبکه اجتماعی":"عمومی";
         currentAutoProfileHost=host;
-        prefs.edit().putString("lastAutoProfile",currentAutoProfile)
-                .putString("lastAutoProfileHost",host).apply();
+        prefs.edit().putString("lastAutoProfile",currentAutoProfile).putString("lastAutoProfileHost",host).apply();
+        // Never display profile/status text over the search field or webpage.
         if(status!=null)status.setVisibility(View.GONE);
     }
 
@@ -752,10 +738,10 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
     private void showHome(){web.loadDataWithBaseURL("https://home.invalid/",homeHtml(),"text/html","UTF-8",null);address.setText("");}
     private String homeHtml(){ String[] links={"Radio Garden|https://radio.garden/|📻","TuneIn|https://tunein.com/radio/Stream-All-Regions-c425242/|📻","SomaFM|https://somafm.com/|🎵","myTuner Radio|https://mytuner-radio.com/|📻","Radio Paradise|https://radioparadise.com/|🎵","BBC Sounds|https://www.bbc.co.uk/sounds|🇬🇧","Al Jazeera Live|https://www.aljazeera.com/video/live/|📺","DW Live|https://www.dw.com/en/live-tv/s-100825|🇩🇪","France 24|https://www.france24.com/en/live|🇫🇷","Euronews|https://www.euronews.com/live|📺","NHK World|https://www3.nhk.or.jp/nhkworld/en/live/|🇯🇵","CNA|https://www.channelnewsasia.com/watch|🇸🇬","Plex Live TV|https://watch.plex.tv/live-tv|📺","Watream|https://watream.com/|🌍","FaraNews Live|https://faranews.auratech.af/live|🌍","OSINT.tv|https://osint.tv/|🌍"}; StringBuilder cards=new StringBuilder(); for(String x:links){String[] p=x.split("\\|",-1); String domain=Uri.parse(p[1]).getHost(); String icon="https://www.google.com/s2/favicons?domain="+domain+"&sz=64"; cards.append("<a class='card' href='").append(p[1]).append("'><img src='").append(icon).append("' onerror=\"this.style.display='none'\"><span>").append(p[2]).append(" ").append(p[0]).append("</span></a>");} return "<html><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{font-family:Arial;background:#dbe9fa;color:#143b70;padding:14px;text-align:center}.head{background:linear-gradient(#3989f8,#0751b7);color:white;padding:14px;border-radius:7px}.grid{display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:7px;max-width:720px;margin:14px auto}.card{display:flex;align-items:center;gap:8px;text-decoration:none;color:#143b70;background:#f8f7ef;border:1px solid #7b9ebd;border-radius:4px;padding:8px;text-align:left}.card img{width:28px;height:28px}.section{margin-top:18px}</style><div class='head'><h1>FastDesk Browser</h1><p>صفحه خانه</p></div><h2 class='section'>رادیو و تلویزیون زندهٔ جهان</h2><div class='grid'>"+cards.toString()+"</div><h2>سایت‌های آماده</h2><div class='grid'><a class='card' href='https://archive.org'>📚 Archive.org</a><a class='card' href='https://www.nhk.or.jp'>🇯🇵 NHK</a><a class='card' href='https://github.com'>🐙 GitHub</a><a class='card' href='https://chatgpt.com'>🤖 ChatGPT</a><a class='card' href='https://web.telegram.org'>✈️ Telegram</a><a class='card' href='https://web.whatsapp.com'>💬 WhatsApp</a><a class='card' href='https://discord.com/app'>🎮 Discord</a><a class='card' href='https://eitaa.com'>📱 ایتا</a></div><h2>منابع افزونه‌ها</h2><div class='grid'><a class='card' href='https://chromewebstore.google.com/'>🧩 Chrome Web Store</a><a class='card' href='https://addons.mozilla.org/'>🦊 Firefox Add-ons</a><a class='card' href='https://microsoftedge.microsoft.com/addons/Microsoft-Edge-Extensions-Home'>🌐 Edge Add-ons</a><a class='card' href='https://greasyfork.org/'>🧩 Greasy Fork</a></div></html>"; }
 
-    private void toggleCopyMode(){copyMode=!copyMode;copyButton.setText(copyMode?"لغو Copy":"Copy Mini Win");copyButton.setBackground(borderDrawable(copyMode?0xffffe08a:0xfff8f7ef,0xff7b9ebd));if(copyMode){injectCopyScript();Toast.makeText(this,"حالت کپی فعال است؛ روی بخش موردنظر صفحه بزنید.",Toast.LENGTH_LONG).show();}else{web.evaluateJavascript("(function(){if(window.__miniWinHandler){document.removeEventListener('click',window.__miniWinHandler,true);window.__miniWinHandler=null;}document.documentElement.style.cursor='';})()",null);}}
+    private void toggleCopyMode(){copyMode=!copyMode;copyButton.setText(copyMode?"لغو Copy":"Copy Mini Win");copyButton.setBackground(borderDrawable(copyMode?0xffffe08a:0xfff8f7ef,0xff7b9ebd));if(copyMode){injectCopyScript();silentMessage();}else{web.evaluateJavascript("(function(){if(window.__miniWinHandler){document.removeEventListener('click',window.__miniWinHandler,true);window.__miniWinHandler=null;}document.documentElement.style.cursor='';})()",null);}}
     private void injectCopyScript(){String js="(function(){if(window.__miniWinHandler)return;document.documentElement.style.cursor='crosshair';window.__miniWinHandler=function(e){if(!window.MiniWinBridge)return;e.preventDefault();e.stopPropagation();var n=e.target;var t=(n.innerText||n.alt||n.getAttribute('aria-label')||n.title||'').trim();var img=(n.tagName==='IMG')?(n.currentSrc||n.src):'';var html='';try{html=n.outerHTML||'';}catch(x){}var r=n.getBoundingClientRect();window.MiniWinBridge.copyElement(t,img,html,Math.max(0,r.left),Math.max(0,r.top),Math.max(1,r.width),Math.max(1,r.height));};document.addEventListener('click',window.__miniWinHandler,true);})()";web.evaluateJavascript(js,null);}
     public class PageBridge {
-        @JavascriptInterface public void copyElement(String text,String imageUrl,String html,double left,double top,double width,double height){runOnUiThread(()->{String out=(text==null?"":text);if(imageUrl!=null&&!imageUrl.isEmpty())out+=(out.isEmpty()?"":"\n")+"Image URL: "+imageUrl;if(out.isEmpty())out=html==null?"":html;if(out.length()>100000)out=out.substring(0,100000);try{float scale=web.getScale();int x=Math.max(0,(int)(left*scale)),y=Math.max(0,(int)(top*scale));int w=Math.min(web.getWidth()-x,Math.max(1,(int)(width*scale))),h=Math.min(web.getHeight()-y,Math.max(1,(int)(height*scale)));if(w>0&&h>0){Bitmap full=Bitmap.createBitmap(web.getWidth(),web.getHeight(),Bitmap.Config.ARGB_8888);web.draw(new Canvas(full));Bitmap crop=Bitmap.createBitmap(full,x,y,w,h);full.recycle();File dir=new File(getCacheDir(),"clipboard");if(!dir.exists())dir.mkdirs();File file=new File(dir,"copy_"+System.currentTimeMillis()+".png");try(FileOutputStream fos=new FileOutputStream(file)){crop.compress(Bitmap.CompressFormat.PNG,100,fos);}crop.recycle();android.net.Uri uri=androidx.core.content.FileProvider.getUriForFile(MainActivity.this,getPackageName()+".fileprovider",file);ClipData clip=new ClipData("Copy Mini Win",new String[]{"text/plain","image/png"},new ClipData.Item(uri));clip.addItem(new ClipData.Item(out));android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);cm.setPrimaryClip(clip);Toast.makeText(MainActivity.this,"تصویر بخش و متن آن کپی شد",Toast.LENGTH_SHORT).show();return;}}catch(Exception ignored){}android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);cm.setPrimaryClip(ClipData.newPlainText("Copy Mini Win",out));Toast.makeText(MainActivity.this,"متن و اطلاعات بخش کپی شد",Toast.LENGTH_SHORT).show();});}
+        @JavascriptInterface public void copyElement(String text,String imageUrl,String html,double left,double top,double width,double height){runOnUiThread(()->{String out=(text==null?"":text);if(imageUrl!=null&&!imageUrl.isEmpty())out+=(out.isEmpty()?"":"\n")+"Image URL: "+imageUrl;if(out.isEmpty())out=html==null?"":html;if(out.length()>100000)out=out.substring(0,100000);try{float scale=web.getScale();int x=Math.max(0,(int)(left*scale)),y=Math.max(0,(int)(top*scale));int w=Math.min(web.getWidth()-x,Math.max(1,(int)(width*scale))),h=Math.min(web.getHeight()-y,Math.max(1,(int)(height*scale)));if(w>0&&h>0){Bitmap full=Bitmap.createBitmap(web.getWidth(),web.getHeight(),Bitmap.Config.ARGB_8888);web.draw(new Canvas(full));Bitmap crop=Bitmap.createBitmap(full,x,y,w,h);full.recycle();File dir=new File(getCacheDir(),"clipboard");if(!dir.exists())dir.mkdirs();File file=new File(dir,"copy_"+System.currentTimeMillis()+".png");try(FileOutputStream fos=new FileOutputStream(file)){crop.compress(Bitmap.CompressFormat.PNG,100,fos);}crop.recycle();android.net.Uri uri=androidx.core.content.FileProvider.getUriForFile(MainActivity.this,getPackageName()+".fileprovider",file);ClipData clip=new ClipData("Copy Mini Win",new String[]{"text/plain","image/png"},new ClipData.Item(uri));clip.addItem(new ClipData.Item(out));android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);cm.setPrimaryClip(clip);silentMessage();return;}}catch(Exception ignored){}android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);cm.setPrimaryClip(ClipData.newPlainText("Copy Mini Win",out));silentMessage();});}
         @JavascriptInterface public void exportContent(String content,String type){runOnUiThread(()->startExport(content,type));}
         @JavascriptInterface public void saveFormState(String url,String json){if(url!=null&&json!=null&&json.length()<500000)prefs.edit().putString("formUrl",url).putString("formState",json).apply();}
     }
@@ -767,7 +753,7 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         items.removeIf(x->x.endsWith("\t"+url)); items.add(0,entry); while(items.size()>500)items.remove(items.size()-1);
         prefs.edit().putStringSet("history",new LinkedHashSet<>(items)).apply();
     }
-    private void addBookmark(){String url=web.getUrl();if(url==null||url.startsWith("about:")){Toast.makeText(this,"صفحه‌ای برای نشانک وجود ندارد",Toast.LENGTH_SHORT).show();return;}String title=web.getTitle();if(title==null||title.trim().isEmpty())title=url;EditText name=new EditText(this);name.setText(title);new AlertDialog.Builder(this).setTitle("ذخیره نشانک").setView(name).setPositiveButton("ذخیره",(d,w)->{String entry=name.getText().toString().replace("\t"," ")+"\t"+url;ArrayList<String> a=new ArrayList<>(prefs.getStringSet("bookmarks",new HashSet<>()));a.removeIf(x->x.endsWith("\t"+url));a.add(0,entry);prefs.edit().putStringSet("bookmarks",new LinkedHashSet<>(a)).apply();Toast.makeText(this,"نشانک ذخیره شد",Toast.LENGTH_SHORT).show();}).setNegativeButton("لغو",null).show();}
+    private void addBookmark(){String url=web.getUrl();if(url==null||url.startsWith("about:")){silentMessage();return;}String title=web.getTitle();if(title==null||title.trim().isEmpty())title=url;EditText name=new EditText(this);name.setText(title);new AlertDialog.Builder(this).setTitle("ذخیره نشانک").setView(name).setPositiveButton("ذخیره",(d,w)->{String entry=name.getText().toString().replace("\t"," ")+"\t"+url;ArrayList<String> a=new ArrayList<>(prefs.getStringSet("bookmarks",new HashSet<>()));a.removeIf(x->x.endsWith("\t"+url));a.add(0,entry);prefs.edit().putStringSet("bookmarks",new LinkedHashSet<>(a)).apply();silentMessage();}).setNegativeButton("لغو",null).show();}
     private void showBookmarks(){showSavedList("نشانک‌ها","bookmarks",true);}
     private void showHistory(){showSavedList("تاریخچه","history",false);}
     private void showSavedList(String title,String key,boolean bookmarks){ArrayList<String> a=new ArrayList<>(prefs.getStringSet(key,new HashSet<>()));Collections.sort(a,(x,y)->{if(bookmarks)return x.compareToIgnoreCase(y);try{return Long.compare(Long.parseLong(y.substring(0,y.indexOf('\t'))),Long.parseLong(x.substring(0,x.indexOf('\t'))));}catch(Exception e){return y.compareTo(x);}});ArrayList<String> labels=new ArrayList<>(),urls=new ArrayList<>();for(String item:a){String[] p=item.split("\\t",3);if(bookmarks){if(p.length>=2){labels.add(p[0]);urls.add(p[1]);}}else if(p.length>=3){labels.add(p[1]);urls.add(p[2]);}}String[] display=labels.toArray(new String[0]);new AlertDialog.Builder(this).setTitle(title+" ("+display.length+")").setItems(display,(d,w)->loadUrl(urls.get(w))).setNeutralButton("پاک‌کردن",(d,w)->new AlertDialog.Builder(this).setMessage("همه موارد این فهرست پاک شوند؟").setPositiveButton("پاک‌کردن",(x,y)->prefs.edit().remove(key).apply()).setNegativeButton("لغو",null).show()).setNegativeButton("بستن",null).show();}
@@ -781,15 +767,15 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             String current=web!=null?web.getUrl():null;
             if(current==null||current.trim().isEmpty()||current.startsWith("about:"))current="https://www.google.com/";
             final String targetUrl=current;
-            if(which==0){Toast.makeText(this,"مرورگر داخلی FastDesk فعال است",Toast.LENGTH_SHORT).show();return;}
-            if(which==7){try{Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(targetUrl));startActivity(Intent.createChooser(intent,"بازکردن صفحه با"));}catch(Exception e){Toast.makeText(this,"مرورگر سازگار پیدا نشد",Toast.LENGTH_SHORT).show();}return;}
+            if(which==0){silentMessage();return;}
+            if(which==7){try{Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(targetUrl));startActivity(Intent.createChooser(intent,"بازکردن صفحه با"));}catch(Exception e){silentMessage();}return;}
             String pkg=packages[which];
             try{Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(targetUrl));intent.setPackage(pkg);startActivity(intent);}
             catch(Exception e){new AlertDialog.Builder(this).setTitle("مرورگر نصب نیست").setMessage(names[which]+" روی دستگاه پیدا نشد. می‌توانی آن را نصب کنی یا صفحه را با مرورگر دیگری باز کنی.").setPositiveButton("انتخاب مرورگر دیگر",(d,w)->{try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_VIEW,Uri.parse(targetUrl)),"بازکردن صفحه با"));}catch(Exception ignored){}}).setNegativeButton("بستن",null).show();}
         }).setNegativeButton("بستن",null).show();
     }
 
-    private void showSettings(){String[] options={"مصرف کم اینترنت / فقط متن","حالت دسکتاپ (User-Agent)","تم Windows XP / Android","مدیریت موتورهای جست‌وجو","نوار ابزار فشرده","وضعیت شبکه و سازگاری نسل‌ها","مدیریت افزونه‌ها","JavaScript روشن/خاموش","پاک‌کردن حافظه نهان","پاک‌کردن کوکی‌ها و داده سایت","بارگذاری بدون کش","مدیریت دانلود و صفحه","مرورگرهای دیگر (Edge / Chrome / Firefox / Opera / Brave / Samsung Internet)"};new AlertDialog.Builder(this).setTitle("تنظیمات و کنترل مرورگر").setItems(options,(d,which)->{switch(which){case 0:textOnly=!textOnly;prefs.edit().putBoolean("textOnly",textOnly).apply();web.getSettings().setLoadsImagesAutomatically(!textOnly);web.getSettings().setBlockNetworkImage(textOnly);status.setText(textOnly?"حالت کم‌مصرف: تصاویر مسدود شدند":"حالت عادی فعال شد");web.reload();break;case 1:desktopMode=!desktopMode;prefs.edit().putBoolean("desktop",desktopMode).apply();applyUserAgent();status.setText(desktopMode?"حالت دسکتاپ فعال شد؛ سایت دوباره بارگذاری می‌شود":"حالت موبایل فعال شد؛ سایت دوباره بارگذاری می‌شود");web.reload();break;case 2:showThemeChoice();break;case 3:showSearchSettings();break;case 4:compactToolbar=!compactToolbar;prefs.edit().putBoolean("compact",compactToolbar).apply();for(int i=0;i<toolbar.getChildCount();i++){View item=toolbar.getChildAt(i);item.setPadding(dp(compactToolbar?4:7),dp(3),dp(compactToolbar?4:7),dp(3));}break;case 5:updateNetworkStatus();new AlertDialog.Builder(this).setMessage("اتصال فعلی: "+networkDescription()+"\nبهینه‌سازی مرورگر با هر اتصال فعال کار می‌کند. نسل شبکه را مودم و اپراتور تعیین می‌کنند؛ 6G فقط با پشتیبانی واقعی دستگاه/شبکه قابل استفاده است.").setPositiveButton("باشه",null).show();break;case 6:showExtensions();break;case 7:boolean js=!prefs.getBoolean("javascript",true);prefs.edit().putBoolean("javascript",js).apply();web.getSettings().setJavaScriptEnabled(js);Toast.makeText(this,js?"JavaScript روشن شد":"JavaScript خاموش شد؛ بعضی سایت‌ها ممکن است کار نکنند",Toast.LENGTH_LONG).show();break;case 8:web.clearCache(true);Toast.makeText(this,"حافظه نهان پاک شد",Toast.LENGTH_SHORT).show();break;case 9:new AlertDialog.Builder(this).setMessage("با پاک‌کردن کوکی‌ها ممکن است از حساب‌های سایت‌ها خارج شوید.").setPositiveButton("پاک‌کردن",(x,y)->{CookieManager.getInstance().removeAllCookies(v->runOnUiThread(()->Toast.makeText(this,"کوکی‌ها پاک شدند",Toast.LENGTH_SHORT).show()));CookieManager.getInstance().flush();}).setNegativeButton("لغو",null).show();break;case 10:boolean noCache=!prefs.getBoolean("noCache",false);prefs.edit().putBoolean("noCache",noCache).apply();web.getSettings().setCacheMode(noCache?WebSettings.LOAD_NO_CACHE:WebSettings.LOAD_CACHE_ELSE_NETWORK);Toast.makeText(this,noCache?"بارگذاری بدون کش فعال شد":"ذخیره موقت صفحه‌ها فعال شد؛ بازگشت و رفتن به جلو تا حد امکان از داده‌های ذخیره‌شده استفاده می‌کند",Toast.LENGTH_LONG).show();break;case 11:showSaveMenu();break;case 12:showOtherBrowsers();break;}}).setNegativeButton("بستن",null).show();}
+    private void showSettings(){String[] options={"مصرف کم اینترنت / فقط متن","حالت دسکتاپ (User-Agent)","تم Windows XP / Android","مدیریت موتورهای جست‌وجو","نوار ابزار فشرده","وضعیت شبکه و سازگاری نسل‌ها","مدیریت افزونه‌ها","JavaScript روشن/خاموش","پاک‌کردن حافظه نهان","پاک‌کردن کوکی‌ها و داده سایت","بارگذاری بدون کش","مدیریت دانلود و صفحه","مرورگرهای دیگر (Edge / Chrome / Firefox / Opera / Brave / Samsung Internet)"};new AlertDialog.Builder(this).setTitle("تنظیمات و کنترل مرورگر").setItems(options,(d,which)->{switch(which){case 0:textOnly=!textOnly;prefs.edit().putBoolean("textOnly",textOnly).apply();web.getSettings().setLoadsImagesAutomatically(!textOnly);web.getSettings().setBlockNetworkImage(textOnly);status.setText(textOnly?"حالت کم‌مصرف: تصاویر مسدود شدند":"حالت عادی فعال شد");web.reload();break;case 1:desktopMode=!desktopMode;prefs.edit().putBoolean("desktop",desktopMode).apply();applyUserAgent();status.setText(desktopMode?"حالت دسکتاپ فعال شد؛ سایت دوباره بارگذاری می‌شود":"حالت موبایل فعال شد؛ سایت دوباره بارگذاری می‌شود");web.reload();break;case 2:showThemeChoice();break;case 3:showSearchSettings();break;case 4:compactToolbar=!compactToolbar;prefs.edit().putBoolean("compact",compactToolbar).apply();for(int i=0;i<toolbar.getChildCount();i++){View item=toolbar.getChildAt(i);item.setPadding(dp(compactToolbar?4:7),dp(3),dp(compactToolbar?4:7),dp(3));}break;case 5:updateNetworkStatus();new AlertDialog.Builder(this).setMessage("اتصال فعلی: "+networkDescription()+"\nبهینه‌سازی مرورگر با هر اتصال فعال کار می‌کند. نسل شبکه را مودم و اپراتور تعیین می‌کنند؛ 6G فقط با پشتیبانی واقعی دستگاه/شبکه قابل استفاده است.").setPositiveButton("باشه",null).show();break;case 6:showExtensions();break;case 7:boolean js=!prefs.getBoolean("javascript",true);prefs.edit().putBoolean("javascript",js).apply();web.getSettings().setJavaScriptEnabled(js);silentMessage();break;case 8:web.clearCache(true);silentMessage();break;case 9:new AlertDialog.Builder(this).setMessage("با پاک‌کردن کوکی‌ها ممکن است از حساب‌های سایت‌ها خارج شوید.").setPositiveButton("پاک‌کردن",(x,y)->{CookieManager.getInstance().removeAllCookies(v->runOnUiThread(()->silentMessage()));CookieManager.getInstance().flush();}).setNegativeButton("لغو",null).show();break;case 10:boolean noCache=!prefs.getBoolean("noCache",false);prefs.edit().putBoolean("noCache",noCache).apply();web.getSettings().setCacheMode(noCache?WebSettings.LOAD_NO_CACHE:WebSettings.LOAD_CACHE_ELSE_NETWORK);silentMessage();break;case 11:showSaveMenu();break;case 12:showOtherBrowsers();break;}}).setNegativeButton("بستن",null).show();}
     private void showThemeChoice(){new AlertDialog.Builder(this).setTitle("سبک نمایش").setItems(new String[]{"Windows XP","Android ساده"},(d,w)->{androidTheme=(w==1);applyTheme(root);status.setText(androidTheme?"تم Android ساده فعال":"تم Windows XP فعال");}).show();}
     private void applyTheme(View view){
         if(view instanceof TextView && !(view instanceof EditText)){
@@ -806,12 +792,12 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             switch(w){case 0:setSearchTemplate("https://www.google.com/search?q=%s");break;case 1:setSearchTemplate("https://www.bing.com/search?q=%s");break;case 2:setSearchTemplate("https://duckduckgo.com/?q=%s");break;case 3:setSearchTemplate("https://search.brave.com/search?q=%s");break;case 4:showCustomSearchEngine();break;}
         }).show();
     }
-    private void setSearchTemplate(String value){searchTemplate=value;prefs.edit().putString("searchTemplate",value).apply();Toast.makeText(this,"موتور جست‌وجو ذخیره شد",Toast.LENGTH_SHORT).show();}
-    private void showCustomSearchEngine(){EditText e=new EditText(this);e.setSingleLine(true);e.setText(searchTemplate);e.setHint("https://example.com/search?q=%s");new AlertDialog.Builder(this).setTitle("افزودن موتور دلخواه").setMessage("%s با عبارت جست‌وجو جایگزین می‌شود.").setView(e).setPositiveButton("ذخیره",(d,w)->{String val=e.getText().toString().trim();if(val.contains("%s")&&val.startsWith("http"))setSearchTemplate(val);else Toast.makeText(this,"آدرس باید با http شروع شود و %s داشته باشد",Toast.LENGTH_LONG).show();}).setNegativeButton("لغو",null).show();}
+    private void setSearchTemplate(String value){searchTemplate=value;prefs.edit().putString("searchTemplate",value).apply();silentMessage();}
+    private void showCustomSearchEngine(){EditText e=new EditText(this);e.setSingleLine(true);e.setText(searchTemplate);e.setHint("https://example.com/search?q=%s");new AlertDialog.Builder(this).setTitle("افزودن موتور دلخواه").setMessage("%s با عبارت جست‌وجو جایگزین می‌شود.").setView(e).setPositiveButton("ذخیره",(d,w)->{String val=e.getText().toString().trim();if(val.contains("%s")&&val.startsWith("http"))setSearchTemplate(val);else silentMessage();}).setNegativeButton("لغو",null).show();}
     private void showExtensions(){
         EditText code=new EditText(this);code.setGravity(Gravity.TOP|Gravity.START);code.setMinLines(5);code.setHint("// JavaScript افزونه شما\ndocument.body.style.fontSize='18px';");
         Set<String> saved=prefs.getStringSet("extensions",new HashSet<>());StringBuilder existing=new StringBuilder();for(String item:saved){existing.append("• ").append(item.length()>60?item.substring(0,60)+"…":item).append("\n");}
-        new AlertDialog.Builder(this).setTitle("افزونه‌های JavaScript").setMessage("تعداد افزونه‌های ذخیره‌شده: "+saved.size()+"\nکد فقط در صفحه‌های بازشده توسط همین مرورگر اجرا می‌شود.\n"+existing).setView(code).setPositiveButton("افزودن",(d,w)->{String js=code.getText().toString().trim();if(!js.isEmpty()){Set<String> copy=new HashSet<>(prefs.getStringSet("extensions",new HashSet<>()));copy.add(js);prefs.edit().putStringSet("extensions",copy).apply();Toast.makeText(this,"افزونه ذخیره شد؛ صفحه را دوباره بارگذاری کنید.",Toast.LENGTH_LONG).show();}}).setNeutralButton("پاک کردن همه",(d,w)->{prefs.edit().remove("extensions").apply();Toast.makeText(this,"همه افزونه‌ها پاک شدند",Toast.LENGTH_SHORT).show();}).setNegativeButton("بستن",null).show();
+        new AlertDialog.Builder(this).setTitle("افزونه‌های JavaScript").setMessage("تعداد افزونه‌های ذخیره‌شده: "+saved.size()+"\nکد فقط در صفحه‌های بازشده توسط همین مرورگر اجرا می‌شود.\n"+existing).setView(code).setPositiveButton("افزودن",(d,w)->{String js=code.getText().toString().trim();if(!js.isEmpty()){Set<String> copy=new HashSet<>(prefs.getStringSet("extensions",new HashSet<>()));copy.add(js);prefs.edit().putStringSet("extensions",copy).apply();silentMessage();}}).setNeutralButton("پاک کردن همه",(d,w)->{prefs.edit().remove("extensions").apply();silentMessage();}).setNegativeButton("بستن",null).show();
     }
     private void runExtensions(){Set<String> scripts=prefs.getStringSet("extensions",new HashSet<>());for(String js:scripts){if(js!=null&&!js.trim().isEmpty())try{web.evaluateJavascript("try{\n"+js+"\n}catch(e){console.error('Browser extension',e)}",null);}catch(Exception ignored){}}}
     private void applyUserAgent(){
@@ -856,15 +842,15 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
 
     private void showSaveMenu(){new AlertDialog.Builder(this).setTitle("ذخیره صفحه").setItems(new String[]{"متن صفحه (.txt)","کد صفحه (.xml / HTML)","تصویر صفحه (.jpg)","چاپ / ذخیره PDF"},(d,w)->{if(w==0)web.evaluateJavascript("document.body?document.body.innerText:''",v->startExport(unquoteJs(v),"txt"));else if(w==1)web.evaluateJavascript("document.documentElement?document.documentElement.outerHTML:''",v->startExport(unquoteJs(v),"xml"));else if(w==2)saveScreenshot();else savePdf();}).show();}
     private String unquoteJs(String v){if(v==null||v.equals("null"))return "";try{return new org.json.JSONTokener(v).nextValue().toString();}catch(Exception e){return v;}}
-    private void startExport(String content,String type){pendingExport=type;String ext=type.equals("txt")?"txt":"xml";String mime=type.equals("txt")?"text/plain":"application/xml";String name="webpage_"+new SimpleDateFormat("yyyyMMdd_HHmmss",Locale.US).format(new Date())+"."+ext;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType(mime);i.putExtra(Intent.EXTRA_TITLE,name);pendingExportContent=content;try{startActivityForResult(i,REQ_SAVE_EXPORT);}catch(Exception e){Toast.makeText(this,"ذخیره‌سازی در این دستگاه پشتیبانی نشد",Toast.LENGTH_LONG).show();}}
+    private void startExport(String content,String type){pendingExport=type;String ext=type.equals("txt")?"txt":"xml";String mime=type.equals("txt")?"text/plain":"application/xml";String name="webpage_"+new SimpleDateFormat("yyyyMMdd_HHmmss",Locale.US).format(new Date())+"."+ext;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType(mime);i.putExtra(Intent.EXTRA_TITLE,name);pendingExportContent=content;try{startActivityForResult(i,REQ_SAVE_EXPORT);}catch(Exception e){silentMessage();}}
     private String pendingExportContent="";
-    private void saveScreenshot(){try{if(web.getWidth()<=0||web.getHeight()<=0)return;Bitmap b=Bitmap.createBitmap(web.getWidth(),web.getHeight(),Bitmap.Config.ARGB_8888);web.draw(new Canvas(b));pendingExport="jpg";Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/jpeg");i.putExtra(Intent.EXTRA_TITLE,"webpage_"+System.currentTimeMillis()+".jpg");pendingBitmap=b;startActivityForResult(i,REQ_SAVE_EXPORT);}catch(Exception e){Toast.makeText(this,"گرفتن تصویر ناموفق بود",Toast.LENGTH_SHORT).show();}}
+    private void saveScreenshot(){try{if(web.getWidth()<=0||web.getHeight()<=0)return;Bitmap b=Bitmap.createBitmap(web.getWidth(),web.getHeight(),Bitmap.Config.ARGB_8888);web.draw(new Canvas(b));pendingExport="jpg";Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/jpeg");i.putExtra(Intent.EXTRA_TITLE,"webpage_"+System.currentTimeMillis()+".jpg");pendingBitmap=b;startActivityForResult(i,REQ_SAVE_EXPORT);}catch(Exception e){silentMessage();}}
     private Bitmap pendingBitmap;
-    private void savePdf(){try{PrintManager pm=(PrintManager)getSystemService(PRINT_SERVICE);String name="WebPage_"+System.currentTimeMillis();pm.print(name,web.createPrintDocumentAdapter(name),new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).setResolution(new PrintAttributes.Resolution("pdf","PDF",300,300)).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build());}catch(Exception e){Toast.makeText(this,"چاپ PDF در دسترس نیست",Toast.LENGTH_SHORT).show();}}
+    private void savePdf(){try{PrintManager pm=(PrintManager)getSystemService(PRINT_SERVICE);String name="WebPage_"+System.currentTimeMillis();pm.print(name,web.createPrintDocumentAdapter(name),new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).setResolution(new PrintAttributes.Resolution("pdf","PDF",300,300)).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build());}catch(Exception e){silentMessage();}}
 
     private void promptDownload(String url,String name){pendingDownloadUrl=url;pendingDownloadName=safeFileName(name);EditText e=new EditText(this);e.setSingleLine(true);e.setText(pendingDownloadName);new AlertDialog.Builder(this).setTitle("دانلود فایل").setMessage("نام فایل را بررسی کنید؛ برای انتخاب محل ذخیره ادامه دهید.").setView(e).setPositiveButton("انتخاب محل ذخیره",(d,w)->{pendingDownloadName=safeFileName(e.getText().toString());launchDownloadSave();}).setNeutralButton("پوشه Downloads",(d,w)->{pendingDownloadName=safeFileName(e.getText().toString());startDownloadManager();}).setNegativeButton("لغو",null).show();}
     private void launchDownloadSave(){String ext="";int p=pendingDownloadName.lastIndexOf('.');if(p>=0)ext=pendingDownloadName.substring(p+1).toLowerCase(Locale.ROOT);String mime=URLConnection.guessContentTypeFromName(pendingDownloadName);if(mime==null)mime="application/octet-stream";Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType(mime);i.putExtra(Intent.EXTRA_TITLE,pendingDownloadName);try{startActivityForResult(i,REQ_SAVE_DOWNLOAD);}catch(Exception e){startDownloadManager();}}
-    private void startDownloadManager(){try{DownloadManager dm=(DownloadManager)getSystemService(DOWNLOAD_SERVICE);DownloadManager.Request r=new DownloadManager.Request(Uri.parse(pendingDownloadUrl));r.setTitle(pendingDownloadName);r.setDescription("FastDesk Browser");r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);String cookie=CookieManager.getInstance().getCookie(pendingDownloadUrl);if(cookie!=null)r.addRequestHeader("Cookie",cookie);r.addRequestHeader("User-Agent",web.getSettings().getUserAgentString());r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,pendingDownloadName);dm.enqueue(r);Toast.makeText(this,"دانلود به پوشه Downloads فرستاده شد",Toast.LENGTH_LONG).show();}catch(Exception e){Toast.makeText(this,"شروع دانلود ممکن نشد: "+e.getMessage(),Toast.LENGTH_LONG).show();}}
+    private void startDownloadManager(){try{DownloadManager dm=(DownloadManager)getSystemService(DOWNLOAD_SERVICE);DownloadManager.Request r=new DownloadManager.Request(Uri.parse(pendingDownloadUrl));r.setTitle(pendingDownloadName);r.setDescription("FastDesk Browser");r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);String cookie=CookieManager.getInstance().getCookie(pendingDownloadUrl);if(cookie!=null)r.addRequestHeader("Cookie",cookie);r.addRequestHeader("User-Agent",web.getSettings().getUserAgentString());r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,pendingDownloadName);dm.enqueue(r);silentMessage();}catch(Exception e){silentMessage();}}
     private boolean isMediaCandidate(String value){
         if(value==null||!(value.startsWith("http://")||value.startsWith("https://")))return false;
         String u=value.toLowerCase(Locale.ROOT);
@@ -901,23 +887,23 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             .setItems(labels,(d,which)->{String u=choices.get(which);new AlertDialog.Builder(this).setTitle("لینک رسانه")
                 .setItems(new String[]{"دانلود رسانه","کپی لینک","استفاده از آخرین لینک"},(dd,action)->{
                     if(action==0)promptDownload(u,guessName(u,null));
-                    else if(action==1){((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("media url",u));Toast.makeText(this,"لینک کپی شد",Toast.LENGTH_SHORT).show();}
+                    else if(action==1){((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("media url",u));silentMessage();}
                     else{detectedMediaUrl=u;promptDownload(u,guessName(u,null));}
                 }).setNegativeButton("لغو",null).show();})
             .setNeutralButton("پاک‌کردن فهرست",(d,w)->{synchronized(detectedMediaUrls){detectedMediaUrls.clear();}detectedMediaUrl="";setVideoReady(false);})
             .setNegativeButton("بستن",null).show();
     }
-    private void setVideoReady(boolean ready){if(downloadButton==null)return;if(ready){downloadButton.setText("ساخت لینک •");downloadButton.setTextColor(0xffffffcc);status.setText("رسانه‌هایی شناسایی شده‌اند؛ برای ساخت لینک بزنید.");}else{downloadButton.clearAnimation();downloadButton.setText("ساخت لینک");downloadButton.setTextColor(Color.WHITE);}}
+    private void setVideoReady(boolean ready){if(downloadButton==null)return;if(ready){downloadButton.setText("ساخت لینک •");downloadButton.setTextColor(0xffffffcc);status.setVisibility(View.GONE);}else{downloadButton.clearAnimation();downloadButton.setText("ساخت لینک");downloadButton.setTextColor(Color.WHITE);}}
     private String guessName(String url,String disposition){if(url!=null&&url.toLowerCase(Locale.ROOT).contains(".m3u8"))return "video.ts";if(disposition!=null){java.util.regex.Matcher m=java.util.regex.Pattern.compile("filename\\*=UTF-8''([^;]+)|filename=\\\"?([^;\\\"]+)\\\"?",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(disposition);if(m.find()){String n=m.group(1)!=null?m.group(1):m.group(2);try{return Uri.decode(n);}catch(Exception ignored){return n;}}}try{String path=Uri.parse(url).getLastPathSegment();if(path!=null&&!path.isEmpty())return path;}catch(Exception ignored){}return "download_"+System.currentTimeMillis();}
     private String safeFileName(String s){if(s==null||s.trim().isEmpty())s="download";s=s.replaceAll("[\\\\/:*?\"<>|]","_").trim();if(s.length()>120)s=s.substring(0,120);return s;}
     private void chooseUploads(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);startActivityForResult(i,REQ_UPLOAD);}
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);
         if(requestCode==REQ_UPLOAD){if(fileCallback!=null){Uri[] results=null;if(resultCode==RESULT_OK&&data!=null){if(data.getClipData()!=null){int n=data.getClipData().getItemCount();results=new Uri[n];for(int i=0;i<n;i++)results[i]=data.getClipData().getItemAt(i).getUri();}else if(data.getData()!=null)results=new Uri[]{data.getData()};}fileCallback.onReceiveValue(results);fileCallback=null;}return;}
-        if(resultCode!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();if(requestCode==REQ_SAVE_EXPORT){try(OutputStream out=getContentResolver().openOutputStream(uri)){if(out==null)throw new IOException("Cannot open output");if("jpg".equals(pendingExport)&&pendingBitmap!=null){pendingBitmap.compress(Bitmap.CompressFormat.JPEG,92,out);pendingBitmap.recycle();pendingBitmap=null;}else{String text=pendingExportContent==null?"":pendingExportContent;if("xml".equals(pendingExport)){text="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<webpage sourceUrl=\""+xmlEscape(web.getUrl()==null?"":web.getUrl())+"\"><![CDATA[\n"+text.replace("]]>", "]]]]><![CDATA[>")+"\n]]></webpage>";}out.write(text.getBytes(StandardCharsets.UTF_8));}Toast.makeText(this,"صفحه ذخیره شد",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,"ذخیره ناموفق: "+e.getMessage(),Toast.LENGTH_LONG).show();}}
+        if(resultCode!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();if(requestCode==REQ_SAVE_EXPORT){try(OutputStream out=getContentResolver().openOutputStream(uri)){if(out==null)throw new IOException("Cannot open output");if("jpg".equals(pendingExport)&&pendingBitmap!=null){pendingBitmap.compress(Bitmap.CompressFormat.JPEG,92,out);pendingBitmap.recycle();pendingBitmap=null;}else{String text=pendingExportContent==null?"":pendingExportContent;if("xml".equals(pendingExport)){text="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<webpage sourceUrl=\""+xmlEscape(web.getUrl()==null?"":web.getUrl())+"\"><![CDATA[\n"+text.replace("]]>", "]]]]><![CDATA[>")+"\n]]></webpage>";}out.write(text.getBytes(StandardCharsets.UTF_8));}silentMessage();}catch(Exception e){silentMessage();}}
         else if(requestCode==REQ_SAVE_DOWNLOAD){downloadToUri(pendingDownloadUrl,uri,pendingDownloadName);}
     }
-    private void downloadToUri(String url,Uri dest,String name){Toast.makeText(this,"دانلود آغاز شد: "+name,Toast.LENGTH_SHORT).show();new Thread(()->{try(OutputStream out=getContentResolver().openOutputStream(dest)){if(out==null)throw new IOException("مقصد ذخیره باز نشد");if(url.toLowerCase(Locale.ROOT).contains(".m3u8")){downloadHls(url,out,0); }else{HttpURLConnection c=openConnection(url);try(InputStream in=c.getInputStream()){copyStream(in,out);}finally{c.disconnect();}}handler.post(()->Toast.makeText(this,"دانلود کامل شد",Toast.LENGTH_LONG).show());}catch(Exception e){String msg=e.getMessage();handler.post(()->new AlertDialog.Builder(this).setTitle("خطا در دانلود").setMessage(String.valueOf(msg)+"\nاین لینک ممکن است منقضی شده، نیازمند ورود، یا دارای رمزگذاری محافظت‌شده باشد.").setPositiveButton("تلاش با Downloads",(d,w)->startDownloadManager()).setNegativeButton("بستن",null).show());}}).start();}
+    private void downloadToUri(String url,Uri dest,String name){silentMessage();new Thread(()->{try(OutputStream out=getContentResolver().openOutputStream(dest)){if(out==null)throw new IOException("مقصد ذخیره باز نشد");if(url.toLowerCase(Locale.ROOT).contains(".m3u8")){downloadHls(url,out,0); }else{HttpURLConnection c=openConnection(url);try(InputStream in=c.getInputStream()){copyStream(in,out);}finally{c.disconnect();}}handler.post(()->silentMessage());}catch(Exception e){String msg=e.getMessage();handler.post(()->new AlertDialog.Builder(this).setTitle("خطا در دانلود").setMessage(String.valueOf(msg)+"\nاین لینک ممکن است منقضی شده، نیازمند ورود، یا دارای رمزگذاری محافظت‌شده باشد.").setPositiveButton("تلاش با Downloads",(d,w)->startDownloadManager()).setNegativeButton("بستن",null).show());}}).start();}
     private HttpURLConnection openConnection(String url)throws IOException{HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setConnectTimeout(25000);c.setReadTimeout(45000);c.setInstanceFollowRedirects(true);String cookie=CookieManager.getInstance().getCookie(url);if(cookie!=null)c.setRequestProperty("Cookie",cookie);c.setRequestProperty("User-Agent",web.getSettings().getUserAgentString());String ref=web.getUrl();if(ref!=null)c.setRequestProperty("Referer",ref);c.setRequestProperty("Accept","*/*");c.connect();if(c.getResponseCode()>=400)throw new IOException("HTTP "+c.getResponseCode());return c;}
     private byte[] readUrl(String url)throws IOException{HttpURLConnection c=openConnection(url);try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){copyStream(in,out);return out.toByteArray();}finally{c.disconnect();}}
     private void copyStream(InputStream in,OutputStream out)throws IOException{byte[] buf=new byte[65536];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);}
