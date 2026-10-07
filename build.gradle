@@ -1,3 +1,42 @@
 plugins {
-    id 'com.android.application' version '8.6.1' apply false
+    id 'com.android.application'
 }
+
+android {
+    namespace 'com.gapgpt.fastdeskbrowser'
+    compileSdk 33
+
+    defaultConfig {
+        applicationId "com.gapgpt.fastdeskbrowser"
+        minSdk 24
+        targetSdk 33
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    // این بخش اصلی برای رفع خطای شماست (کتابخانه AppCompat)
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    
+    // برای مدیریت دانلود و نمایش عکس‌ها و غیره
+    implementation 'androidx.browser:browser:1.5.0'
+    implementation 'com.github.bumptech.glide:glide:4.15.1'
+    annotationProcessor 'com.github.bumptech.glide:compiler:4.15.1'
+}
+
