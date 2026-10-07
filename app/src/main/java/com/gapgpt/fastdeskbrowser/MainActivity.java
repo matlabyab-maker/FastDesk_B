@@ -65,14 +65,9 @@ public class MainActivity extends Activity {
     private String pendingDownloadUrl = "";
     private String pendingDownloadName = "download";
     private String detectedMediaUrl = "";
-    private String currentAutoProfile = "عمومی";
-    private String currentAutoProfileHost = "";
     private final LinkedHashSet<String> detectedMediaUrls = new LinkedHashSet<>();
     private boolean mediaUiPending = false;
     private ValueCallback<Uri[]> fileCallback;
-    private PermissionRequest pendingWebPermissionRequest;
-    private GeolocationPermissions.Callback pendingGeoCallback;
-    private String pendingGeoOrigin;
     private android.content.SharedPreferences prefs;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private static class TabState { Bundle state; String url; String title; TabState(Bundle b,String u,String t){state=b;url=u;title=t;} }
@@ -84,6 +79,7 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences("browser", MODE_PRIVATE);
+        prefs.edit().remove("lastAutoProfile").remove("lastAutoProfileHost").apply();
         textOnly = prefs.getBoolean("textOnly", false);
         desktopMode = prefs.contains("desktop") ? prefs.getBoolean("desktop", true) : true;
         compactToolbar = prefs.getBoolean("compact", false);
@@ -450,25 +446,18 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         s.setSupportMultipleWindows(false); s.setJavaScriptCanOpenWindowsAutomatically(true);
         applyUserAgent(); web.addJavascriptInterface(new PageBridge(),"MiniWinBridge");
         web.setWebViewClient(new WebViewClient(){
-            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){applyAutomaticSiteProfile(url);updateAddress(url);setOnlineTitle();progress.setVisibility(fullScreenEnabled?View.GONE:View.VISIBLE);progress.setProgress(5);}
+            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){updateAddress(url);setOnlineTitle();progress.setVisibility(fullScreenEnabled?View.GONE:View.VISIBLE);progress.setProgress(5);}
             @Override public void onPageFinished(WebView view,String url){updateAddress(url);progress.setProgress(100);handler.postDelayed(()->progress.setVisibility(View.GONE),120);prefs.edit().putString("lastUrl",url).apply();rememberHistory(url,view.getTitle()); if(!tabs.isEmpty()){tabs.get(currentTab).url=url;tabs.get(currentTab).title=view.getTitle();rebuildTabs();} restoreFormStateIfNeeded(url);if(isOnline()) { appName.setText("🌐  FastDesk Browser"); if(status!=null)status.setVisibility(View.GONE); } else setOfflineUi();if(copyMode) injectCopyScript();if(desktopMode) { enforceDesktopViewport(); web.getSettings().setLoadWithOverviewMode(false); }if(!prefs.getStringSet("extensions",new HashSet<>()).isEmpty()) runExtensions();}
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error){super.onReceivedError(view,request,error);if(request.isForMainFrame()){progress.setVisibility(View.GONE);if(!isOnline())setOfflineUi();else{appName.setText("🌐  FastDesk Browser");status.setText("خطا در بازکردن سایت: "+error.getDescription()+" | برای تلاش دوباره بارگذاری کنید");}}}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){super.onReceivedHttpError(view,request,response);if(request.isForMainFrame())status.setText("پاسخ سایت: HTTP "+response.getStatusCode()+" | "+networkDescription());}
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){
                 String u=req.getUrl().toString();
-                if(req.isForMainFrame()) {
-                    // Google blocks many account sign-ins in embedded WebViews. Open account/auth pages
-                    // directly in the installed browser, without presenting a chooser dialog.
-                    if(isSensitiveAuthUrl(u)) { openSensitiveAuthPage(u); return true; }
-                    applyAutomaticSiteProfile(u);
-                }
                 if(u.startsWith("http://")||u.startsWith("https://")) return false;
                 openExternalAppLink(u);
                 return true;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,String url){
                 if(url==null)return false;
-                if(isSensitiveAuthUrl(url)) { openSensitiveAuthPage(url); return true; }
                 if(url.startsWith("http://")||url.startsWith("https://"))return false;
                 openExternalAppLink(url);
                 return true;
@@ -487,8 +476,6 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
         web.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView v,int p){progress.setProgress(p);}
             @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){if(fileCallback!=null)fileCallback.onReceiveValue(null);fileCallback=callback;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);try{startActivityForResult(i,REQ_UPLOAD);}catch(Exception e){fileCallback=null;silentMessage();return false;}return true;}
-            @Override public void onPermissionRequest(PermissionRequest request){runOnUiThread(()->askWebPermission(request));}
-            @Override public void onGeolocationPermissionsShowPrompt(String origin,GeolocationPermissions.Callback callback){new AlertDialog.Builder(MainActivity.this).setTitle("دسترسی مکانی سایت").setMessage(origin+" درخواست موقعیت مکانی دارد. فقط در صورت اعتماد اجازه دهید.").setPositiveButton("ادامه",(d,w)->{pendingGeoOrigin=origin;pendingGeoCallback=callback;if(androidx.core.content.ContextCompat.checkSelfPermission(MainActivity.this,android.Manifest.permission.ACCESS_FINE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED||androidx.core.content.ContextCompat.checkSelfPermission(MainActivity.this,android.Manifest.permission.ACCESS_COARSE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED)finishGeoPermission(true);else requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.ACCESS_COARSE_LOCATION},4202);}).setNegativeButton("رد",(d,w)->callback.invoke(origin,false,false)).show();}
         });
         web.setDownloadListener((url,ua,contentDisposition,mimeType,length)->promptDownload(url,guessName(url,contentDisposition)));
     }
@@ -529,58 +516,6 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
             silentMessage();
         }
     }
-
-    private boolean isSensitiveAuthUrl(String value){
-        try {
-            Uri u=Uri.parse(value); String h=u.getHost();
-            if(h==null || !("http".equalsIgnoreCase(u.getScheme()) || "https".equalsIgnoreCase(u.getScheme()))) return false;
-            h=h.toLowerCase(Locale.ROOT);
-            return h.equals("accounts.google.com") || h.equals("myaccount.google.com")
-                    || h.equals("account.google.com") || h.equals("login.google.com")
-                    || h.equals("auth.openai.com") || h.equals("auth0.openai.com");
-        } catch(Exception ignored){ return false; }
-    }
-
-    private void openSensitiveAuthPage(String value){
-        if(value==null || value.trim().isEmpty()) return;
-        Uri uri;
-        try { uri=Uri.parse(value); } catch(Exception e) { return; }
-        // Sensitive sign-in pages (Google and OpenAI) may reject embedded WebViews.
-        // Launch a real installed browser explicitly. Do NOT fall back to an implicit ACTION_VIEW:
-        // that can select FastDesk itself and create the repeated "choose browser" dialog loop.
-        String[] supportedBrowsers = {
-            "com.android.chrome",
-            "org.mozilla.firefox",
-            "com.microsoft.emmx",
-            "com.sec.android.app.sbrowser",
-            "com.brave.browser",
-            "com.opera.browser"
-        };
-        for(String packageName : supportedBrowsers){
-            try {
-                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-                intent.addCategory(Intent.CATEGORY_BROWSABLE);
-                intent.setPackage(packageName);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(intent);
-                return;
-            } catch(android.content.ActivityNotFoundException ignored) {
-                // Try the next known browser without opening a chooser.
-            } catch(Exception ignored) {
-                // A browser may be installed but unavailable; continue to the next one.
-            }
-        }
-        // If no supported browser is installed, stay in FastDesk rather than reopening itself
-        // through Android's generic browser chooser.
-        try { status.setText("برای ورود امن، Chrome یا یک مرورگر پشتیبانی‌شده نصب کنید."); }
-        catch(Exception ignored) {}
-    }
-
-    private void askWebPermission(PermissionRequest request){String[] resources=request.getResources();ArrayList<String> androidPermissions=new ArrayList<>();for(String r:resources){if(PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r))androidPermissions.add(android.Manifest.permission.RECORD_AUDIO);if(PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r))androidPermissions.add(android.Manifest.permission.CAMERA);}if(androidPermissions.isEmpty()){new AlertDialog.Builder(this).setTitle("درخواست دسترسی سایت").setMessage("این سایت درخواست دسترسی به قابلیت دستگاه دارد. اجازه فقط برای همین درخواست داده می‌شود.").setPositiveButton("اجازه",(d,w)->request.grant(resources)).setNegativeButton("رد",(d,w)->request.deny()).show();return;}pendingWebPermissionRequest=request;new AlertDialog.Builder(this).setTitle("دسترسی صدا/دوربین").setMessage("سایت "+web.getUrl()+" درخواست استفاده از میکروفون یا دوربین دارد. فقط اگر تماس یا قابلیت صوتی/تصویری را خودتان شروع کرده‌اید اجازه دهید.").setPositiveButton("ادامه",(d,w)->{ArrayList<String> missing=new ArrayList<>();for(String p:androidPermissions)if(androidx.core.content.ContextCompat.checkSelfPermission(this,p)!=android.content.pm.PackageManager.PERMISSION_GRANTED)missing.add(p);if(missing.isEmpty())grantPendingWebPermission();else requestPermissions(missing.toArray(new String[0]),4201);}).setNegativeButton("رد",(d,w)->{pendingWebPermissionRequest=null;request.deny();}).show();}
-    private void grantPendingWebPermission(){if(pendingWebPermissionRequest==null)return;for(String r:pendingWebPermissionRequest.getResources()){if(PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)&&androidx.core.content.ContextCompat.checkSelfPermission(this,android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){pendingWebPermissionRequest.deny();pendingWebPermissionRequest=null;return;}if(PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)&&androidx.core.content.ContextCompat.checkSelfPermission(this,android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){pendingWebPermissionRequest.deny();pendingWebPermissionRequest=null;return;}}pendingWebPermissionRequest.grant(pendingWebPermissionRequest.getResources());pendingWebPermissionRequest=null;}
-    private void finishGeoPermission(boolean granted){if(pendingGeoCallback!=null){pendingGeoCallback.invoke(pendingGeoOrigin,granted,false);pendingGeoCallback=null;pendingGeoOrigin=null;}}
-    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){super.onRequestPermissionsResult(requestCode,permissions,grantResults);if(requestCode==4201){boolean ok=grantResults.length>0;for(int g:grantResults)ok&=g==android.content.pm.PackageManager.PERMISSION_GRANTED;if(ok)grantPendingWebPermission();else if(pendingWebPermissionRequest!=null){pendingWebPermissionRequest.deny();pendingWebPermissionRequest=null;}}else if(requestCode==4202){boolean ok=false;for(int g:grantResults)ok|=g==android.content.pm.PackageManager.PERMISSION_GRANTED;finishGeoPermission(ok);}}
-
 
     private void saveBrowserSettings(){
         boolean ok=prefs.edit().putBoolean("textOnly",textOnly).putBoolean("desktop",desktopMode).putBoolean("compact",compactToolbar).commit();
@@ -687,65 +622,9 @@ title.addView(xpIcon,new LinearLayout.LayoutParams(dp(26),dp(26)));
     private void navigateFromAddress(){String raw=address.getText().toString().trim();if(raw.isEmpty())return;((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(),0);if(raw.matches("(?i)^[a-z][a-z0-9+.-]*://.*")||raw.startsWith("file:"))loadUrl(raw);else if(raw.matches("(?i)^(localhost|\\d{1,3}(\\.\\d{1,3}){3})(:\\d+)?(/.*)?$")||(raw.contains(".")&&!raw.contains(" ")))loadUrl("https://"+raw);else loadUrl(String.format(Locale.US,searchTemplate,Uri.encode(raw)));}
     private void loadUrl(String u){
         if(u==null||u.trim().isEmpty())return;
-        applyAutomaticSiteProfile(u);
         web.loadUrl(u);
     }
 
-    /** Applies practical WebView compatibility settings for the destination host. */
-    private void applyAutomaticSiteProfile(String value){
-        if(web==null||value==null)return;
-        Uri uri;
-        try{uri=Uri.parse(value);}catch(Exception e){return;}
-        String scheme=uri.getScheme(), host=uri.getHost();
-        if(host==null||!("http".equalsIgnoreCase(scheme)||"https".equalsIgnoreCase(scheme)))return;
-        host=host.toLowerCase(Locale.ROOT);
-        WebSettings s=web.getSettings();
-
-        boolean auth=matchesHost(host,"accounts.google.com","login.google.com","login.live.com","login.microsoftonline.com","login.microsoft.com","appleid.apple.com","login.yahoo.com","auth0.com","okta.com","identity.microsoft.com","id.atlassian.com","signin.aws.amazon.com","login.gov","accounts.snapchat.com");
-        boolean finance=matchesHost(host,"paypal.com","stripe.com","wise.com","revolut.com","cash.app","venmo.com","bankofamerica.com","chase.com","wellsfargo.com","capitalone.com") || host.contains("bank") || host.contains("banking");
-        boolean work=matchesHost(host,"docs.google.com","sheets.google.com","slides.google.com","drive.google.com","office.com","microsoft365.com","live.com","notion.so","figma.com","github.com","gitlab.com","atlassian.net","slack.com","trello.com","dropbox.com","onedrive.live.com","canva.com","linear.app","zoom.us","meet.google.com","teams.microsoft.com");
-        boolean media=matchesHost(host,"youtube.com","youtu.be","googlevideo.com","vimeo.com","dailymotion.com","twitch.tv","soundcloud.com","spotify.com","netflix.com","disneyplus.com","primevideo.com");
-        boolean social=matchesHost(host,"instagram.com","facebook.com","tiktok.com","x.com","twitter.com","reddit.com","pinterest.com","telegram.org","web.telegram.org","whatsapp.com","web.whatsapp.com");
-
-        // Baseline: standards-compliant browser behavior; preserve user-selected JS and data-saving mode.
-        s.setJavaScriptEnabled(prefs.getBoolean("javascript",true));
-        s.setDomStorageEnabled(true);
-        s.setDatabaseEnabled(true);
-        s.setJavaScriptCanOpenWindowsAutomatically(true);
-        s.setSupportMultipleWindows(false);
-        s.setLoadsImagesAutomatically(!textOnly);
-        s.setBlockNetworkImage(textOnly);
-        s.setUseWideViewPort(true);
-        s.setSupportZoom(true);
-        s.setBuiltInZoomControls(true);
-        s.setDisplayZoomControls(false);
-        s.setLoadWithOverviewMode(!desktopMode);
-        s.setLayoutAlgorithm((desktopMode||work)?WebSettings.LayoutAlgorithm.NORMAL:WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
-        s.setMediaPlaybackRequiresUserGesture(!(media||social));
-        s.setCacheMode(prefs.getBoolean("noCache",false)?WebSettings.LOAD_NO_CACHE:WebSettings.LOAD_DEFAULT);
-        if(Build.VERSION.SDK_INT>=21){
-            s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-            CookieManager cm=CookieManager.getInstance();
-            cm.setAcceptCookie(true);
-            // Auth, work apps, and media often rely on embedded identity/session cookies.
-            // Finance keeps third-party cookies off by default; no Android permission is granted here.
-            cm.setAcceptThirdPartyCookies(web,!finance && (auth||work||media||social||!finance));
-        }
-        currentAutoProfile=finance?"مالی":auth?"ورود و حساب":work?"کاری و وب‌اپ":media?"رسانه":social?"شبکه اجتماعی":"عمومی";
-        currentAutoProfileHost=host;
-        prefs.edit().putString("lastAutoProfile",currentAutoProfile).putString("lastAutoProfileHost",host).apply();
-        // Never display profile/status text over the search field or webpage.
-        if(status!=null)status.setVisibility(View.GONE);
-    }
-
-    private boolean matchesHost(String host,String... patterns){
-        for(String pattern:patterns){
-            if("bank".equals(pattern)||"banking".equals(pattern)){
-                if(host.contains(pattern))return true;
-            }else if(host.equals(pattern)||host.endsWith("."+pattern))return true;
-        }
-        return false;
-    }
     private void updateAddress(String u){if(u!=null&&!u.equals("about:blank"))address.setText(u);}
     private void showHome(){web.loadDataWithBaseURL("https://home.invalid/",homeHtml(),"text/html","UTF-8",null);address.setText("");}
     private String homeHtml(){ String[] links={"Radio Garden|https://radio.garden/|📻","TuneIn|https://tunein.com/radio/Stream-All-Regions-c425242/|📻","SomaFM|https://somafm.com/|🎵","myTuner Radio|https://mytuner-radio.com/|📻","Radio Paradise|https://radioparadise.com/|🎵","BBC Sounds|https://www.bbc.co.uk/sounds|🇬🇧","Al Jazeera Live|https://www.aljazeera.com/video/live/|📺","DW Live|https://www.dw.com/en/live-tv/s-100825|🇩🇪","France 24|https://www.france24.com/en/live|🇫🇷","Euronews|https://www.euronews.com/live|📺","NHK World|https://www3.nhk.or.jp/nhkworld/en/live/|🇯🇵","CNA|https://www.channelnewsasia.com/watch|🇸🇬","Plex Live TV|https://watch.plex.tv/live-tv|📺","Watream|https://watream.com/|🌍","FaraNews Live|https://faranews.auratech.af/live|🌍","OSINT.tv|https://osint.tv/|🌍"}; StringBuilder cards=new StringBuilder(); for(String x:links){String[] p=x.split("\\|",-1); String domain=Uri.parse(p[1]).getHost(); String icon="https://www.google.com/s2/favicons?domain="+domain+"&sz=64"; cards.append("<a class='card' href='").append(p[1]).append("'><img src='").append(icon).append("' onerror=\"this.style.display='none'\"><span>").append(p[2]).append(" ").append(p[0]).append("</span></a>");} return "<html><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{font-family:Arial;background:#dbe9fa;color:#143b70;padding:14px;text-align:center}.head{background:linear-gradient(#3989f8,#0751b7);color:white;padding:14px;border-radius:7px}.grid{display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:7px;max-width:720px;margin:14px auto}.card{display:flex;align-items:center;gap:8px;text-decoration:none;color:#143b70;background:#f8f7ef;border:1px solid #7b9ebd;border-radius:4px;padding:8px;text-align:left}.card img{width:28px;height:28px}.section{margin-top:18px}</style><div class='head'><h1>FastDesk Browser</h1><p>صفحه خانه</p></div><h2 class='section'>رادیو و تلویزیون زندهٔ جهان</h2><div class='grid'>"+cards.toString()+"</div><h2>سایت‌های آماده</h2><div class='grid'><a class='card' href='https://archive.org'>📚 Archive.org</a><a class='card' href='https://www.nhk.or.jp'>🇯🇵 NHK</a><a class='card' href='https://github.com'>🐙 GitHub</a><a class='card' href='https://chatgpt.com'>🤖 ChatGPT</a><a class='card' href='https://web.telegram.org'>✈️ Telegram</a><a class='card' href='https://web.whatsapp.com'>💬 WhatsApp</a><a class='card' href='https://discord.com/app'>🎮 Discord</a><a class='card' href='https://eitaa.com'>📱 ایتا</a></div><h2>منابع افزونه‌ها</h2><div class='grid'><a class='card' href='https://chromewebstore.google.com/'>🧩 Chrome Web Store</a><a class='card' href='https://addons.mozilla.org/'>🦊 Firefox Add-ons</a><a class='card' href='https://microsoftedge.microsoft.com/addons/Microsoft-Edge-Extensions-Home'>🌐 Edge Add-ons</a><a class='card' href='https://greasyfork.org/'>🧩 Greasy Fork</a></div></html>"; }
